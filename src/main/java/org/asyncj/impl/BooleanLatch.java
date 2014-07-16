@@ -11,13 +11,21 @@ import java.util.concurrent.locks.AbstractQueuedSynchronizer;
  * @since 1.0
  * @version 1.0
  */
-public class BooleanLatch extends AbstractQueuedSynchronizer {
+public final class BooleanLatch extends AbstractQueuedSynchronizer {
+
+    public BooleanLatch(){
+        setState(0);
+    }
 
     /**
      * Sets signalled state to this object.
      */
     public final void signal(){
         releaseShared(1);
+    }
+
+    public final boolean isSignalled(){
+        return getState() != 0;
     }
 
     /**

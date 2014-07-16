@@ -15,8 +15,8 @@ public interface AsyncResult<V> extends Future<V> {
                             final Function<Exception, AsyncResult<O>> errorHandler);
 
 
-    <O> AsyncResult<O> then(final ThrowableFuntion<? super V, ? extends O> action,
-                                                   final ThrowableFuntion<Exception, ? extends O> errorHandler);
+    <O> AsyncResult<O> then(final ThrowableFunction<? super V, ? extends O> action,
+                                                   final ThrowableFunction<Exception, ? extends O> errorHandler);
 
     void onCompleted(final AsyncCallback<? super V> callback);
 
@@ -33,7 +33,7 @@ public interface AsyncResult<V> extends Future<V> {
      * @param <O>
      * @return
      */
-    default <O> AsyncResult<O> then(final ThrowableFuntion<? super V, ? extends O> action){
+    default <O> AsyncResult<O> then(final ThrowableFunction<? super V, ? extends O> action){
         return then(action, null);
     }
 

@@ -17,7 +17,7 @@ public interface AsyncResourceAccess<R> {
      * @param <V> Type of the resource processing result.
      * @return
      */
-    <V> AsyncResult<V> get(final ThrowableFuntion<R, V> reader);
+    <V> AsyncResult<V> get(final ThrowableFunction<R, V> reader);
 
     void get(final AsyncCallback<R> callback);
 

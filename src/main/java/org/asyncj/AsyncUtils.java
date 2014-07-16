@@ -2,12 +2,9 @@ package org.asyncj;
 
 import org.asyncj.impl.SingleThreadScheduler;
 
-import java.util.Iterator;
-import java.util.Objects;
-import java.util.ServiceLoader;
+import java.util.*;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.stream.Stream;
 
 /**
  * Represents additional routines for asynchronous programming.
@@ -16,16 +13,6 @@ import java.util.stream.Stream;
  * @since 1.0
  */
 public final class AsyncUtils {
-    private static interface Iteration<I, O>{
-        void mapReduce(final I input, final O previous, final AsyncCallback<O> next);
-    }
-    private static final class Box<T>{
-        public T value;
-
-        public Box(final T initialValue){
-            value = initialValue;
-        }
-    }
 
     private AsyncUtils(){
 
@@ -42,24 +29,76 @@ public final class AsyncUtils {
         Objects.requireNonNull(scheduler, "scheduler is null.");
         if(useOverriddenScheduler) return false;
         globalScheduler = scheduler;
-        return true;
+        return useOverriddenScheduler = true;
     }
 
-    private static <I, O> AsyncResult<O> mapReduce(final TaskScheduler scheduler, final Iterator<I> collection, final BiFunction<I, O, O> mapper, final Box<O> accumulator){
-        if(!collection.hasNext()) return scheduler.successful(accumulator.value);
-        return scheduler.successful(accumulator.value).then(new Function<O, AsyncResult<O>>() {
+    public static <I, O> AsyncResult<O> mapReduce(final TaskScheduler scheduler,
+                                                  final Iterator<? extends I> collection,
+                                                  final BiFunction<? super I, ? super O, ? extends O> mapper,
+                                                  final AsyncResult<? extends O> initialValue) {
+        return initialValue.then(new Function<O, AsyncResult<O>>() {
             @Override
-            public AsyncResult<O> apply(O o) {
-                if(collection.hasNext()) {
-                    accumulator.value = mapper.apply(collection.next(), accumulator.value);
-                    return scheduler.successful(accumulator.value).then(this);
-                }
-                else return scheduler.successful(accumulator.value);
+            public AsyncResult<O> apply(O accumulator) {
+                if (collection.hasNext()) {
+                    accumulator = mapper.apply(collection.next(), accumulator);
+                    return scheduler.successful(accumulator).then(this);
+                } else return scheduler.successful(accumulator);
             }
         });
     }
 
-    public static <I, O> AsyncResult<O> mapReduce(final TaskScheduler scheduler, final Iterator<I> collection, final BiFunction<I, O, O> mapper, final O initialValue){
-        return mapReduce(scheduler, collection, mapper, new Box<O>(initialValue));
+    public static <I, O> AsyncResult<O> mapReduce(final TaskScheduler scheduler,
+                                                  final Iterator<? extends I> collection,
+                                                  final BiFunction<? super I, ? super O, ? extends O> mapper,
+                                                  final O initialValue) {
+        return mapReduce(scheduler, collection, mapper, scheduler.successful(initialValue));
+    }
+
+    public static <I, O> AsyncResult<O> mapReduceAsync(final TaskScheduler scheduler,
+                                                  final Iterator<? extends I> collection,
+                                                  final BiFunction<? super I, ? super O, AsyncResult<O>> mapper,
+                                                  final AsyncResult<O> initialValue) {
+        return initialValue.then((O accumulator) -> collection.hasNext() ? mapper.apply(collection.next(), accumulator) : scheduler.successful(accumulator));
+    }
+
+    public static <I, O> AsyncResult<O> mapReduceAsync(final TaskScheduler scheduler,
+                                                  final Iterator<? extends I> collection,
+                                                  final BiFunction<? super I, ? super O, AsyncResult<O>> mapper,
+                                                  final O initialValue) {
+        return mapReduceAsync(scheduler, collection, mapper, scheduler.successful(initialValue));
+    }
+
+    public static <I1, I2, O> AsyncResult<O> reduce(final AsyncResult<I1> value1,
+                                                    final AsyncResult<I2> value2,
+                                                    final BiFunction<? super I1, ? super I2, ? extends O> reducer){
+        return value1.then((I1 v1) -> value2.<O>then((I2 v2) -> reducer.apply(v1, v2)));
+    }
+
+    public static <I1, I2, O> AsyncResult<O> reduceAsync(final AsyncResult<I1> value1, final AsyncResult<I2> value2,
+                                                         final BiFunction<? super I1, ? super I2, AsyncResult<O>> reducer){
+        return value1.then((I1 v1)-> value2.then((I2 v2)-> reducer.apply(v1, v2)));
+    }
+
+    public static <I, O> AsyncResult<O> reduce(final TaskScheduler scheduler,
+                                               final Iterator<AsyncResult<I>> values,
+                                               final ThrowableFunction<? super Collection<I>, O> reducer){
+        return mapReduceAsync(scheduler,
+                values,
+                (AsyncResult<I> result, Collection<I> collection) -> values.next().then((I elem) -> { collection.add(elem); return collection; }),
+                new Vector<>(values instanceof Collection ? ((Collection) values).size() : 10)).
+                then(reducer);
+    }
+
+    public static <I, O> AsyncResult<O> reduceAsync(final TaskScheduler scheduler,
+                                               final Iterator<AsyncResult<I>> values,
+                                               final Function<? super Collection<I>, AsyncResult<O>> reducer) {
+        return mapReduceAsync(scheduler,
+                values,
+                (AsyncResult<I> result, Collection<I> collection) -> values.next().then((I elem) -> {
+                    collection.add(elem);
+                    return collection;
+                }),
+                new Vector<>(values instanceof Collection ? ((Collection) values).size() : 10)).
+                then(reducer);
     }
 }

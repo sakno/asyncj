@@ -32,8 +32,8 @@ public final class ActiveObjectsTest extends Assert {
         });
         final Boolean[] result = even.get();
         assertEquals(3, result.length);
-        assertTrue(result[0]);
-        assertFalse(result[1]);
-        assertTrue(result[0]);
+        assertFalse(result[0]);
+        assertTrue(result[1]);
+        assertFalse(result[0]);
     }
 }

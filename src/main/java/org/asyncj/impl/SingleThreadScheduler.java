@@ -2,6 +2,7 @@ package org.asyncj.impl;
 
 import org.asyncj.AsyncResult;
 
+import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.RunnableFuture;
@@ -45,11 +46,13 @@ public final class SingleThreadScheduler extends AbstractTaskScheduler {
     private final Queue<RunnableFuture<?>> tasks;
     private final ThreadGroup group;
     private volatile TaskExecutionThread executionThread;
+    private final Object mutex;
 
     public SingleThreadScheduler(final ThreadGroup tg){
         group = tg != null ? tg : new ThreadGroup(String.format("Single threaded task scheduler %s", hashCode()));
         tasks = new ConcurrentLinkedQueue<>();
         executionThread = null;
+        mutex = new Object();
     }
 
     public SingleThreadScheduler(){
@@ -58,9 +61,11 @@ public final class SingleThreadScheduler extends AbstractTaskScheduler {
 
     @Override
     protected <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task) {
-        if(executionThread == null || !executionThread.isAlive()){
-            executionThread = new TaskExecutionThread(group, tasks);
-            executionThread.start();
+        synchronized (mutex) {
+            if (executionThread == null || !executionThread.isAlive()) {
+                executionThread = new TaskExecutionThread(group, tasks);
+                executionThread.start();
+            }
         }
         tasks.offer(task);
         return task;
@@ -77,8 +82,10 @@ public final class SingleThreadScheduler extends AbstractTaskScheduler {
      */
     @Override
     public boolean interrupt(final AsyncResult<?> ar) {
-        if(executionThread == null || !executionThread.isAlive())
-            return false;
-        else return executionThread.interrupt(ar);
+        synchronized (mutex) {
+            if (executionThread == null || !executionThread.isAlive())
+                return false;
+            else return executionThread.interrupt(ar);
+        }
     }
 }

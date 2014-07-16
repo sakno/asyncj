@@ -2,34 +2,81 @@ package org.asyncj.impl;
 
 import org.asyncj.*;
 
-import java.util.Objects;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Function;
 
 /**
  * Represents asynchronously executing task.
+ * <p>
+ *     Concurrent linked queue, from which this class derives, used for storing delayed children asynchronous task.
+ *     Direct inheritance is used for optimization reasons of task instantiation and memory arrangement. Therefore,
+ *     the clients of this class should not add or remove elements from the queue.
+ * </p>
  * @author Roman Sakno
  * @version 1.0
  * @since 1.0
  */
-public abstract class Task<V> extends BooleanLatch implements AsyncResult<V>, RunnableFuture<V>, Callable<V> {
+public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements TraceableAsyncResult<V>, RunnableFuture<V>, Callable<V> {
+    private static boolean useAdvancedStringRepresentation = false;
+
     private volatile Exception error;
     private volatile V result;
     private volatile AsyncResultState state;
     private final TaskScheduler scheduler;
-    private final ConcurrentLinkedQueue<Task<?>> children;
+    private final BooleanLatch signaller;
+    private volatile Object marker;
 
     /**
      * Initializes a new task enqueued in the specified scheduler.
      * @param scheduler The scheduler that owns by the newly created task. Cannot be {@literal null}.
      */
     protected Task(final TaskScheduler scheduler){
-        Objects.requireNonNull(scheduler, "scheduler is null.");
+        this.scheduler = Objects.requireNonNull(scheduler, "scheduler is null.");
         result = null;
         error = null;
-        this.scheduler = scheduler;
         this.state = AsyncResultState.CREATED;
-        children = new ConcurrentLinkedQueue<>();
+        signaller = new BooleanLatch();
+        marker = null;
+    }
+
+    /**
+     * Advances implementation of {@link #toString()} method so that it return value will
+     * include encapsulated result and error.
+     * <p>
+     *     By default, {@link #toString()} method of the task returns ID, state and marker.
+     * </p>
+     */
+    @SuppressWarnings("UnusedDeclaration")
+    public static void enableAdvancedStringRepresentation(){
+        useAdvancedStringRepresentation = true;
+    }
+
+    /**
+     * Gets unique identifier of this task.
+     * @return The unique identifier of this task.
+     */
+    public final long getID(){
+        return ((long)scheduler.hashCode() << 32) | ((long)hashCode() & 0xFFFFFFFL);
+    }
+
+    /**
+     * Always returns {@literal false}.
+     * @return {@literal false}.
+     */
+    @Override
+    public final boolean isProxy() {
+        return false;
+    }
+
+    @Override
+    public final void setMarker(final Object marker) {
+        this.marker = marker;
+    }
+
+    @Override
+    public final Object getMarker() {
+        return marker;
     }
 
     /**
@@ -77,11 +124,13 @@ public abstract class Task<V> extends BooleanLatch implements AsyncResult<V>, Ru
             case CREATED:
                 state = AsyncResultState.CANCELLED;
                 error = new CancellationException(String.format("Task %s is cancelled." , this));
-                signal();
+                super.clear();
+                signaller.signal();
             case CANCELLED: return true;
             case EXECUTED:
                 if(mayInterruptIfRunning && scheduler.interrupt(this)){
                     state = AsyncResultState.CANCELLED;
+                    super.clear();
                     return true;
                 }
                 else return false;
@@ -100,7 +149,7 @@ public abstract class Task<V> extends BooleanLatch implements AsyncResult<V>, Ru
      */
     @Override
     public final boolean isDone() {
-        return getState() != 0;
+        return signaller.isSignalled();
     }
 
     /**
@@ -116,7 +165,7 @@ public abstract class Task<V> extends BooleanLatch implements AsyncResult<V>, Ru
      */
     @Override
     public final V get() throws InterruptedException, ExecutionException {
-        await();
+        signaller.await();
         switch (state){
             case CANCELLED: throw new CancellationException();
             case FAILED: throw new ExecutionException(error);
@@ -141,7 +190,7 @@ public abstract class Task<V> extends BooleanLatch implements AsyncResult<V>, Ru
     @SuppressWarnings("NullableProblems")
     @Override
     public final V get(final long timeout, final TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
-        await(timeout, unit);
+        signaller.await(timeout, unit);
         switch (state) {
             case CANCELLED:
                 throw new CancellationException();
@@ -181,17 +230,18 @@ public abstract class Task<V> extends BooleanLatch implements AsyncResult<V>, Ru
         if(isDone()) return;
         state = AsyncResultState.EXECUTED;
         try {
-            complete(call());
+            final V r = call();
+            complete(r);
         }
         catch (final Exception e) {
             fail(e);
         }
         finally {
-            signal();
+            signaller.signal();
         }
         //process all children tasks
-        while (!children.isEmpty())
-            scheduler.enqueue(children.poll());
+        while (!isEmpty())
+            scheduler.enqueue(poll());
     }
 
     /**
@@ -202,21 +252,25 @@ public abstract class Task<V> extends BooleanLatch implements AsyncResult<V>, Ru
     @Override
     public abstract V call() throws Exception;
 
-    private <O> Task<O> enqueueChildTask(final Callable<O> task){
-        final Task<O> result = new Task<O>(scheduler) {
+    <O> Task<O> newChildTask(final Callable<? extends O> task){
+        return new Task<O>(scheduler) {
             @Override
             public O call() throws Exception {
                 return task.call();
             }
         };
-        children.offer(result);
+    }
+
+    private <O> Task<O> enqueueChildTask(final Callable<? extends O> task){
+        final Task<O> result = newChildTask(task);
+        offer(result);
         return result;
     }
 
-    private <O> AsyncResult<O> then(final Callable<O> task){
+    private <O> AsyncResult<O> then(final Callable<? extends O> task){
         switch (state){
             case FAILED:
-            case COMPLETED: scheduler.enqueue(task);
+            case COMPLETED: return scheduler.enqueue(task);
             case CREATED:
             case EXECUTED: return enqueueChildTask(task);
             case CANCELLED: return scheduler.failure(error);
@@ -235,8 +289,8 @@ public abstract class Task<V> extends BooleanLatch implements AsyncResult<V>, Ru
     }
 
     @Override
-    public final  <O> AsyncResult<O> then(final ThrowableFuntion<? super V, ? extends O> action,
-                                                        final ThrowableFuntion<Exception, ? extends O> errorHandler) {
+    public final  <O> AsyncResult<O> then(final ThrowableFunction<? super V, ? extends O> action,
+                                                        final ThrowableFunction<Exception, ? extends O> errorHandler) {
         Objects.requireNonNull(action, "action is null.");
         return then(()->{
             if(error == null)
@@ -248,12 +302,12 @@ public abstract class Task<V> extends BooleanLatch implements AsyncResult<V>, Ru
     }
 
     @Override
-    public final  <O> AsyncResult<O> then(ThrowableFuntion<? super V, ? extends O> action) {
+    public final  <O> AsyncResult<O> then(final ThrowableFunction<? super V, ? extends O> action) {
         Objects.requireNonNull(action, "action is null.");
-        return then(()->{
+        return this.<O>then(() -> {
             if(error == null)
                 return action.apply(result);
-            else throw  error;
+            else throw error;
         });
     }
 
@@ -282,5 +336,20 @@ public abstract class Task<V> extends BooleanLatch implements AsyncResult<V>, Ru
                 else complete(action.apply(result));
             }
         });
+    }
+
+    @Override
+    public final String toString() {
+        return useAdvancedStringRepresentation ?
+                String.format("Task %s(state = %s, marker = %s, result = %s, error = %s)",
+                        getID(),
+                        state,
+                        marker,
+                        result,
+                        error) :
+                String.format("Task %s(state = %s, marker = %s)",
+                        getID(),
+                        state,
+                        marker);
     }
 }

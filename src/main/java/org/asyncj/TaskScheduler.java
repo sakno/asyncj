@@ -28,7 +28,7 @@ public interface TaskScheduler {
      * @param <O>
      * @return
      */
-    <O> AsyncResult<O> enqueue(final Callable<O> task);
+    <O> AsyncResult<O> enqueue(final Callable<? extends O> task);
 
     <O, T extends AsyncResult<O> & RunnableFuture<O>> AsyncResult<O> enqueue(final Function<TaskScheduler, T> taskFactory);
 

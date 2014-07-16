@@ -40,7 +40,7 @@ public abstract class AbstractTaskScheduler implements TaskScheduler {
         return CompletedTask.failure(this, err);
     }
 
-    protected <V> Task<V> createTask(final Callable<V> task){
+    protected <V> Task<V> createTask(final Callable<? extends V> task){
         return new Task<V>(this) {
             @Override
             public V call() throws Exception {
@@ -63,7 +63,7 @@ public abstract class AbstractTaskScheduler implements TaskScheduler {
     }
 
     @Override
-    public final <O> AsyncResult<O> enqueue(final Callable<O> task) {
+    public final <O> AsyncResult<O> enqueue(final Callable<? extends O> task) {
         Objects.requireNonNull(task, "task is null.");
         return task instanceof Task<?> ? enqueue((Task<O>)task) : enqueue(createTask(task));
     }

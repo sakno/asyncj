@@ -13,13 +13,13 @@ public abstract class AbstractAsyncResourceAccess<R> extends ActiveObject implem
 
     protected abstract R getResource();
 
-    private <V> AsyncResult<V> get(final ThrowableFuntion<R, V> reader, final R resource){
+    private <V> AsyncResult<V> get(final ThrowableFunction<R, V> reader, final R resource){
         Objects.requireNonNull(reader, "reader is null.");
         return enqueue(()->reader.apply(resource));
     }
 
     @Override
-    public final  <V> AsyncResult<V> get(final ThrowableFuntion<R, V> reader) {
+    public final  <V> AsyncResult<V> get(final ThrowableFunction<R, V> reader) {
         return get(reader, getResource());
     }
 

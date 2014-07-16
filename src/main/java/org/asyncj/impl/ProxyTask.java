@@ -14,19 +14,28 @@ import java.util.function.Function;
  * @version 1.0
  * @since 1.0
  */
-abstract class ProxyTask<I, O> extends BooleanLatch implements AsyncResult<O>, RunnableFuture<O> {
+abstract class ProxyTask<I, O> extends ConcurrentLinkedQueue<AsyncCallback<? super O>> implements TraceableAsyncResult<O>, RunnableFuture<O> {
     private volatile AsyncResultState state;
     private final TaskScheduler scheduler;
     private final AsyncResult<I> parent;
-    private volatile AsyncResult<O> underlyingTask;
-    private final ConcurrentLinkedQueue<AsyncCallback<? super O>> children;
+    private final BooleanLatch signaller;
+    private volatile AsyncResult<? extends O> underlyingTask;
+    private volatile Object marker;
 
     protected ProxyTask(final TaskScheduler scheduler, final AsyncResult<I> parent){
         Objects.requireNonNull(scheduler, "scheduler is null.");
         this.scheduler = scheduler;
         this.parent = parent;
         state = AsyncResultState.CREATED;
-        children = new ConcurrentLinkedQueue<>();
+        signaller = new BooleanLatch();
+    }
+
+    /**
+     * Gets unique identifier of this task.
+     * @return The unique identifier of this task.
+     */
+    public final long getID(){
+        return ((long)scheduler.hashCode() << 32) | ((long)hashCode() & 0xFFFFFFFL);
     }
 
     public final boolean isScheduledBy(final TaskScheduler scheduler){
@@ -35,11 +44,11 @@ abstract class ProxyTask<I, O> extends BooleanLatch implements AsyncResult<O>, R
 
     protected abstract void run(final I result, final Exception err);
 
-    protected final void complete(final AsyncResult<O> ar){
+    protected final void complete(final AsyncResult<? extends O> ar){
         underlyingTask = ar;
-        signal();
-        while (!children.isEmpty())
-            underlyingTask.onCompleted(children.poll());
+        signaller.signal();
+        while (!isEmpty())
+            underlyingTask.onCompleted(poll());
     }
 
     protected final void failure(final Exception err){
@@ -138,13 +147,13 @@ abstract class ProxyTask<I, O> extends BooleanLatch implements AsyncResult<O>, R
      */
     @Override
     public final O get() throws InterruptedException, ExecutionException {
-        await();
+        signaller.await();
         return underlyingTask.get();
     }
 
     private O get(final long millis) throws InterruptedException, ExecutionException, TimeoutException {
         final Instant now = Instant.now();
-        await(millis, TimeUnit.MILLISECONDS);
+        signaller.await(millis, TimeUnit.MILLISECONDS);
         final Duration timeout = Duration.between(now, Instant.now());
         if (timeout.isNegative()) throw new TimeoutException();
         else return underlyingTask.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
@@ -164,6 +173,7 @@ abstract class ProxyTask<I, O> extends BooleanLatch implements AsyncResult<O>, R
      *                               while waiting
      * @throws java.util.concurrent.TimeoutException      if the wait timed out
      */
+    @SuppressWarnings("NullableProblems")
     @Override
     public final O get(final long timeout, final TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
         return timeout < 0 || timeout == Long.MAX_VALUE ? get() : get(unit.toMillis(timeout));
@@ -199,8 +209,8 @@ abstract class ProxyTask<I, O> extends BooleanLatch implements AsyncResult<O>, R
     }
 
     @Override
-    public final  <O1> AsyncResult<O1> then(final ThrowableFuntion<? super O, ? extends O1> action,
-                                            final ThrowableFuntion<Exception, ? extends O1> errorHandler) {
+    public final  <O1> AsyncResult<O1> then(final ThrowableFunction<? super O, ? extends O1> action,
+                                            final ThrowableFunction<Exception, ? extends O1> errorHandler) {
         Objects.requireNonNull(action, "action is null.");
         if(underlyingTask != null) return underlyingTask.then(action, errorHandler);
         else {
@@ -227,7 +237,7 @@ abstract class ProxyTask<I, O> extends BooleanLatch implements AsyncResult<O>, R
     }
 
     @Override
-    public <O1> AsyncResult<O1> then(final ThrowableFuntion<? super O, ? extends O1> action) {
+    public <O1> AsyncResult<O1> then(final ThrowableFunction<? super O, ? extends O1> action) {
         if (underlyingTask != null) return underlyingTask.then(action);
         else
             return then((O value) -> {
@@ -244,7 +254,35 @@ abstract class ProxyTask<I, O> extends BooleanLatch implements AsyncResult<O>, R
     public final void onCompleted(final AsyncCallback<? super O> callback) {
         Objects.requireNonNull(callback, "callback is null.");
         if (underlyingTask != null) underlyingTask.onCompleted(callback);
-        else children.offer(callback);
+        else offer(callback);
+    }
+
+    /**
+     * Always returns {@literal true}.
+     * @return {@literal true}.
+     */
+    @Override
+    public final boolean isProxy() {
+        return true;
+    }
+
+    @Override
+    public final void setMarker(final Object marker) {
+        this.marker = marker;
+    }
+
+    @Override
+    public final Object getMarker() {
+        return marker;
+    }
+
+    @Override
+    public final String toString() {
+        return underlyingTask == null ? String.format("ProxyTask %s (state = %s, marker = %s)",
+                getID(),
+                state,
+                marker):
+                underlyingTask.toString();
     }
 }
 

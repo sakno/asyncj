@@ -23,11 +23,6 @@ public abstract class CompletedTask<V> extends Task<V> {
             public V call() throws Exception {
                 return value;
             }
-
-            @Override
-            public String toString() {
-                return value != null ? value.toString() : "Completed task";
-            }
         };
     }
 
@@ -37,11 +32,6 @@ public abstract class CompletedTask<V> extends Task<V> {
             @Override
             public V call() throws Exception {
                 throw err;
-            }
-
-            @Override
-            public String toString() {
-                return err.getMessage();
             }
         };
     }
