@@ -1,6 +1,6 @@
 package org.asyncj;
 
-import org.asyncj.impl.SingleThreadScheduler;
+import org.asyncj.impl.TaskExecutor;
 
 import java.lang.reflect.Array;
 
@@ -8,8 +8,8 @@ import java.lang.reflect.Array;
  * Represents test active object.
  */
 final class ArrayOperations extends ActiveObject {
-    public ArrayOperations(){
-        super(new SingleThreadScheduler());
+    public ArrayOperations() {
+        super(TaskExecutor.newSingleThreadExecutor());
     }
 
     private <T> T[] reverseArraySync(final T[] array){

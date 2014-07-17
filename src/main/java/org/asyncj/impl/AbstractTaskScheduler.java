@@ -14,6 +14,10 @@ import java.util.function.Function;
  */
 public abstract class AbstractTaskScheduler implements TaskScheduler {
 
+    protected AbstractTaskScheduler(){
+
+    }
+
     /**
      * Wraps the specified value into completed asynchronous result.
      *
@@ -52,7 +56,7 @@ public abstract class AbstractTaskScheduler implements TaskScheduler {
     protected abstract <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task);
 
     @Override
-    public final  <O, T extends AsyncResult<O> & RunnableFuture<O>> AsyncResult<O> enqueue(final Function<TaskScheduler, T> taskFactory) {
+    public final  <O, T extends AsyncResult<O> & RunnableFuture<O>> AsyncResult<O> enqueueDirect(final Function<TaskScheduler, T> taskFactory) {
         return enqueueTask(taskFactory.apply(this));
     }
 
@@ -62,6 +66,7 @@ public abstract class AbstractTaskScheduler implements TaskScheduler {
         else throw new IllegalArgumentException(String.format("Task %s is not scheduled by this scheduler", task));
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public final <O> AsyncResult<O> enqueue(final Callable<? extends O> task) {
         Objects.requireNonNull(task, "task is null.");

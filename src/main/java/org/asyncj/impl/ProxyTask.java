@@ -184,7 +184,7 @@ abstract class ProxyTask<I, O> extends ConcurrentLinkedQueue<AsyncCallback<? sup
                                             final Function<Exception, AsyncResult<O1>> errorHandler) {
         Objects.requireNonNull(action, "action is null.");
         if(underlyingTask != null) return underlyingTask.then(action, errorHandler);
-        else return scheduler.enqueue((TaskScheduler scheduler) -> new ProxyTask<O, O1>(scheduler, this) {
+        else return scheduler.enqueueDirect((TaskScheduler scheduler) -> new ProxyTask<O, O1>(scheduler, this) {
             @Override
             protected void run(final O result, final Exception err) {
                 if (err != null)
@@ -199,7 +199,7 @@ abstract class ProxyTask<I, O> extends ConcurrentLinkedQueue<AsyncCallback<? sup
     public final  <O1> AsyncResult<O1> then(Function<? super O, AsyncResult<O1>> action) {
         Objects.requireNonNull(action, "action is null.");
         if(underlyingTask != null) return underlyingTask.then(action);
-        else return scheduler.enqueue((TaskScheduler scheduler) -> new ProxyTask<O, O1>(scheduler, this) {
+        else return scheduler.enqueueDirect((TaskScheduler scheduler) -> new ProxyTask<O, O1>(scheduler, this) {
             @Override
             protected void run(final O result, final Exception err) {
                 if (err != null) super.failure(err);

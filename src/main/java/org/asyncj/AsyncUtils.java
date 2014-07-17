@@ -1,8 +1,14 @@
 package org.asyncj;
 
-import org.asyncj.impl.SingleThreadScheduler;
+import org.asyncj.impl.TaskExecutor;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.Objects;
+import java.util.Vector;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -13,23 +19,47 @@ import java.util.function.Function;
  * @since 1.0
  */
 public final class AsyncUtils {
+    private static final class PriorityCallable<V, P extends Comparable<P>> implements PriorityTaskScheduler.PriorityItem<P>, Callable<V>{
+        private final Callable<? extends V> task;
+        private final P priority;
+
+        public PriorityCallable(final Callable<? extends V> task, final P priority){
+            this.task = Objects.requireNonNull(task, "task is null");
+            this.priority = priority;
+        }
+
+        @Override
+        public V call() throws Exception {
+            return task.call();
+        }
+
+        @Override
+        public P getPriority() {
+            return priority;
+        }
+    }
 
     private AsyncUtils(){
 
     }
 
-    private static TaskScheduler globalScheduler = new SingleThreadScheduler();
+    private static TaskScheduler globalScheduler;
     private static boolean useOverriddenScheduler = false;
 
     public static TaskScheduler getGlobalScheduler(){
+        if(globalScheduler == null)
+            globalScheduler = TaskExecutor.newSingleThreadExecutor();
         return globalScheduler;
     }
 
     public static boolean setGlobalScheduler(final TaskScheduler scheduler){
-        Objects.requireNonNull(scheduler, "scheduler is null.");
         if(useOverriddenScheduler) return false;
-        globalScheduler = scheduler;
+        globalScheduler = Objects.requireNonNull(scheduler, "scheduler is null.");
         return useOverriddenScheduler = true;
+    }
+
+    public static TaskScheduler createScheduler(final ExecutorService executor){
+        return new TaskExecutor(executor);
     }
 
     public static <I, O> AsyncResult<O> mapReduce(final TaskScheduler scheduler,
@@ -76,7 +106,7 @@ public final class AsyncUtils {
 
     public static <I1, I2, O> AsyncResult<O> reduceAsync(final AsyncResult<I1> value1, final AsyncResult<I2> value2,
                                                          final BiFunction<? super I1, ? super I2, AsyncResult<O>> reducer){
-        return value1.then((I1 v1)-> value2.then((I2 v2)-> reducer.apply(v1, v2)));
+        return value1.then((I1 v1) -> value2.then((I2 v2) -> reducer.apply(v1, v2)));
     }
 
     public static <I, O> AsyncResult<O> reduce(final TaskScheduler scheduler,
@@ -100,5 +130,28 @@ public final class AsyncUtils {
                 }),
                 new Vector<>(values instanceof Collection ? ((Collection) values).size() : 10)).
                 then(reducer);
+    }
+
+    public static ThreadFactory createDaemonThreadFactory(final int threadPriority,
+                                                          final ThreadGroup group,
+                                                          final ClassLoader contextClassLoader){
+        return r->{
+            final Thread t = new Thread(group, r);
+            t.setDaemon(true);
+            t.setPriority(threadPriority);
+            t.setContextClassLoader(contextClassLoader);
+            return t;
+        };
+    }
+
+    public static ThreadFactory createDaemonThreadFactory(final int threadPriority,
+                                                          final ThreadGroup group){
+        return createDaemonThreadFactory(threadPriority, group, Thread.currentThread().getContextClassLoader());
+    }
+
+    public static <V, P extends Comparable<P>> AsyncResult<V> enqueueWithPriority(final TaskScheduler scheduler,
+                                                                      final Callable<? extends V> task,
+                                                                      final P priority) {
+        return Objects.requireNonNull(scheduler, "scheduler is null.").enqueue(new PriorityCallable<>(task, priority));
     }
 }

@@ -252,7 +252,7 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
     @Override
     public abstract V call() throws Exception;
 
-    <O> Task<O> newChildTask(final Callable<? extends O> task){
+    <O> Task<O> newChildTask(final TaskScheduler scheduler, final Callable<? extends O> task){
         return new Task<O>(scheduler) {
             @Override
             public O call() throws Exception {
@@ -262,7 +262,7 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
     }
 
     private <O> Task<O> enqueueChildTask(final Callable<? extends O> task){
-        final Task<O> result = newChildTask(task);
+        final Task<O> result = newChildTask(scheduler, task);
         offer(result);
         return result;
     }
@@ -315,11 +315,11 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
     public final  <O> AsyncResult<O> then(final Function<? super V, AsyncResult<O>> action,
                                    final Function<Exception, AsyncResult<O>> errorHandler) {
         Objects.requireNonNull(action, "action is null.");
-        return scheduler.enqueue((TaskScheduler scheduler)-> new ProxyTask<V, O>(scheduler, this) {
+        return scheduler.enqueueDirect((TaskScheduler scheduler) -> new ProxyTask<V, O>(scheduler, this) {
             @Override
             protected void run(final V result, final Exception err) {
-                if(err != null)
-                    if(errorHandler != null) complete(errorHandler.apply(err));
+                if (err != null)
+                    if (errorHandler != null) complete(errorHandler.apply(err));
                     else failure(err);
                 else complete(action.apply(result));
             }
@@ -329,10 +329,10 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
     @Override
     public final  <O> AsyncResult<O> then(Function<? super V, AsyncResult<O>> action) {
         Objects.requireNonNull(action, "action is null.");
-        return scheduler.enqueue((TaskScheduler scheduler)-> new ProxyTask<V, O>(scheduler, this) {
+        return scheduler.enqueueDirect((TaskScheduler scheduler) -> new ProxyTask<V, O>(scheduler, this) {
             @Override
             protected void run(final V result, final Exception err) {
-                if(err != null) failure(err);
+                if (err != null) failure(err);
                 else complete(action.apply(result));
             }
         });
