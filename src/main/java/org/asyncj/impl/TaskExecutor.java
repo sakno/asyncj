@@ -55,12 +55,12 @@ public final class TaskExecutor extends AbstractTaskScheduler {
         this(new ThreadPoolExecutor(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory));
     }
 
-    public static TaskExecutor newSingleThreadExecutor(final int priority,
+    public static TaskExecutor newSingleThreadExecutor(final int threadPriority,
                                                        final ThreadGroup group) {
         return new TaskExecutor(0, 1, 30, TimeUnit.SECONDS, new SynchronousQueue<>(), r -> {
             final Thread result = new Thread(group, r);
             result.setDaemon(true);
-            result.setPriority(priority);
+            result.setPriority(threadPriority);
             result.setContextClassLoader(Thread.currentThread().getContextClassLoader());
             return result;
         });

@@ -109,27 +109,49 @@ public final class AsyncUtils {
         return value1.then((I1 v1) -> value2.then((I2 v2) -> reducer.apply(v1, v2)));
     }
 
-    public static <I, O> AsyncResult<O> reduce(final TaskScheduler scheduler,
-                                               final Iterator<AsyncResult<I>> values,
-                                               final ThrowableFunction<? super Collection<I>, O> reducer){
+    static <I, O> AsyncResult<O> reduce(final TaskScheduler scheduler,
+                                        final Iterator<AsyncResult<I>> values,
+                                        final ThrowableFunction<? super Collection<I>, O> reducer,
+                                        final Callable<? extends Collection<I>> initialVector){
         return mapReduceAsync(scheduler,
                 values,
                 (AsyncResult<I> result, Collection<I> collection) -> values.next().then((I elem) -> { collection.add(elem); return collection; }),
-                new Vector<>(values instanceof Collection ? ((Collection) values).size() : 10)).
+                scheduler.enqueue(initialVector)).
                 then(reducer);
     }
 
-    public static <I, O> AsyncResult<O> reduceAsync(final TaskScheduler scheduler,
+    static <V> Callable<? extends Collection<V>> getInitialVectorProvider(final Iterator<?> values) {
+        return () -> new Vector<>(values instanceof Collection ? ((Collection) values).size() : 10);
+    }
+
+    public static <I, O> AsyncResult<O> reduce(final TaskScheduler scheduler,
                                                final Iterator<AsyncResult<I>> values,
-                                               final Function<? super Collection<I>, AsyncResult<O>> reducer) {
+                                               final ThrowableFunction<? super Collection<I>, O> reducer){
+        return reduce(scheduler,
+                values,
+                reducer,
+                AsyncUtils.<I>getInitialVectorProvider(values));
+    }
+
+    static <I, O> AsyncResult<O> reduceAsync(final TaskScheduler scheduler,
+                                                    final Iterator<AsyncResult<I>> values,
+                                                    final Function<? super Collection<I>, AsyncResult<O>> reducer,
+                                                    final Callable<? extends Collection<I>> initialVector) {
         return mapReduceAsync(scheduler,
                 values,
                 (AsyncResult<I> result, Collection<I> collection) -> values.next().then((I elem) -> {
                     collection.add(elem);
                     return collection;
                 }),
-                new Vector<>(values instanceof Collection ? ((Collection) values).size() : 10)).
+                scheduler.enqueue(initialVector)).
                 then(reducer);
+    }
+
+    public static <I, O> AsyncResult<O> reduceAsync(final TaskScheduler scheduler,
+                                               final Iterator<AsyncResult<I>> values,
+                                               final Function<? super Collection<I>, AsyncResult<O>> reducer) {
+        return reduceAsync(scheduler, values, reducer,
+                AsyncUtils.<I>getInitialVectorProvider(values));
     }
 
     public static ThreadFactory createDaemonThreadFactory(final int threadPriority,
@@ -149,9 +171,7 @@ public final class AsyncUtils {
         return createDaemonThreadFactory(threadPriority, group, Thread.currentThread().getContextClassLoader());
     }
 
-    public static <V, P extends Comparable<P>> AsyncResult<V> enqueueWithPriority(final TaskScheduler scheduler,
-                                                                      final Callable<? extends V> task,
-                                                                      final P priority) {
-        return Objects.requireNonNull(scheduler, "scheduler is null.").enqueue(new PriorityCallable<>(task, priority));
+    public static <V, P extends Comparable<P>> Callable<? extends V> prioritize(final Callable<? extends V> task, final P priority){
+        return new PriorityCallable<>(task, priority);
     }
 }

@@ -39,13 +39,12 @@ public abstract class ActiveObject<P extends Comparable<P>> {
         return scheduler.failure(err);
     }
 
-    protected final <O> AsyncResult<O> enqueue(final Callable<O> task) {
-        final ActiveObject obj;
+    protected final <O> AsyncResult<O> enqueue(final Callable<? extends O> task) {
         return scheduler.enqueue(task);
     }
 
     protected final <O> AsyncResult<O> enqueue(final Callable<O> task, final P priority) {
-        return AsyncUtils.enqueueWithPriority(scheduler, task, priority);
+        return enqueue(AsyncUtils.prioritize(task, priority));
     }
 
     protected final <I> void enqueue(final AsyncCallback<? super I> callback, final I value) {
@@ -92,6 +91,14 @@ public abstract class ActiveObject<P extends Comparable<P>> {
         return AsyncUtils.mapReduce(scheduler, collection, mapper, initialValue);
     }
 
+    protected final <I, O> AsyncResult<O> mapReduce(final Iterator<? extends I> collection,
+                                                    final BiFunction<? super I, ? super O, ? extends O> mapper,
+                                                    final O initialValue,
+                                                    final P priority) {
+        return AsyncUtils.mapReduce(scheduler, collection, mapper,
+                enqueue(() -> initialValue, priority));
+    }
+
     protected final <I, O> AsyncResult<O> mapReduceAsync(final Iterator<? extends I> collection,
                                                          final BiFunction<? super I, ? super O, AsyncResult<O>> mapper,
                                                          final AsyncResult<O> initialValue) {
@@ -104,13 +111,37 @@ public abstract class ActiveObject<P extends Comparable<P>> {
         return AsyncUtils.mapReduceAsync(scheduler, collection, mapper, initialValue);
     }
 
+    protected final <I, O> AsyncResult<O> mapReduceAsync(final Iterator<? extends I> collection,
+                                                         final BiFunction<? super I, ? super O, AsyncResult<O>> mapper,
+                                                         final O initialValue,
+                                                         final P priority) {
+        return AsyncUtils.mapReduceAsync(scheduler, collection, mapper,
+                enqueue(() -> initialValue, priority));
+    }
+
     protected final <I, O> AsyncResult<O> reduce(final Iterator<AsyncResult<I>> values,
                                                  final ThrowableFunction<? super Collection<I>, O> reducer) {
         return AsyncUtils.reduce(scheduler, values, reducer);
     }
 
+    protected final <I, O> AsyncResult<O> reduce(final Iterator<AsyncResult<I>> values,
+                                                 final ThrowableFunction<? super Collection<I>, O> reducer,
+                                                 final P priority){
+        return AsyncUtils.reduce(scheduler,
+                values,
+                reducer,
+                AsyncUtils.prioritize(AsyncUtils.<I>getInitialVectorProvider(values), priority));
+    }
+
     protected final <I, O> AsyncResult<O> reduceAsync(final Iterator<AsyncResult<I>> values,
                                                       final Function<? super Collection<I>, AsyncResult<O>> reducer) {
         return AsyncUtils.reduceAsync(scheduler, values, reducer);
+    }
+
+    protected final <I, O> AsyncResult<O> reduceAsync(final Iterator<AsyncResult<I>> values,
+                                                      final Function<? super Collection<I>, AsyncResult<O>> reducer,
+                                                      final P priority) {
+        return AsyncUtils.reduceAsync(scheduler, values, reducer,
+                AsyncUtils.prioritize(AsyncUtils.<I>getInitialVectorProvider(values), priority));
     }
 }
