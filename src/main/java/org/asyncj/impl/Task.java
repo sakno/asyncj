@@ -13,6 +13,7 @@ import java.util.function.Function;
  *     Direct inheritance is used for optimization reasons of task instantiation and memory arrangement. Therefore,
  *     the clients of this class should not add or remove elements from the queue.
  * </p>
+ * @param <V> Type of the asynchronous computation result.
  * @author Roman Sakno
  * @version 1.0
  * @since 1.0
@@ -223,7 +224,11 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
     }
 
     /**
-     * Executes the task synchronously.
+     * Executes this task synchronously.
+     * <p>
+     *     This method invokes {@link #call()} synchronously, therefore, it should be executed in the thread
+     *     provided by task scheduler.
+     * </p>
      */
     @Override
     public final void run() {
@@ -279,6 +284,10 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
         }
     }
 
+    /**
+     * Attaches completion callback to this task.
+     * @param callback The completion callback. Cannot be {@literal null}.
+     */
     @Override
     public final void onCompleted(final AsyncCallback<? super V> callback) {
         Objects.requireNonNull(callback, "callback is null.");
@@ -288,6 +297,15 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
         });
     }
 
+    /**
+     * {@inheritDoc}
+     * @param action The action implementing attached asynchronous computation if this computation
+     *               is completed successfully. Cannot be {@literal null}.
+     * @param errorHandler The action implementing attached asynchronous computation if this computation
+     *               is failed. May be {@literal null}.
+     * @param <O> Type of the attached asynchronous computation result.
+     * @return The object that represents state of the attached asynchronous computation.
+     */
     @Override
     public final  <O> AsyncResult<O> then(final ThrowableFunction<? super V, ? extends O> action,
                                                         final ThrowableFunction<Exception, ? extends O> errorHandler) {
@@ -301,6 +319,12 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
         });
     }
 
+    /**
+     * {@inheritDoc}
+     * @param action
+     * @param <O>
+     * @return
+     */
     @Override
     public final  <O> AsyncResult<O> then(final ThrowableFunction<? super V, ? extends O> action) {
         Objects.requireNonNull(action, "action is null.");
@@ -338,18 +362,21 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
         });
     }
 
+    final String toString(final Map<String, Object> fields){
+        fields.put("state", state);
+        fields.put("marker", marker);
+        if(useAdvancedStringRepresentation){
+            fields.put("result", result);
+            fields.put("error", error);
+        }
+        final Collection<String> stringBuilder = new ArrayList<>(fields.size());
+        for(final Map.Entry<String, Object> entry: fields.entrySet())
+            stringBuilder.add(String.format("%s = %s", entry.getKey(), entry.getValue()));
+        return String.format("Task %s(%s)", getID(), String.join(", ", stringBuilder));
+    }
+
     @Override
-    public final String toString() {
-        return useAdvancedStringRepresentation ?
-                String.format("Task %s(state = %s, marker = %s, result = %s, error = %s)",
-                        getID(),
-                        state,
-                        marker,
-                        result,
-                        error) :
-                String.format("Task %s(state = %s, marker = %s)",
-                        getID(),
-                        state,
-                        marker);
+    public String toString() {
+        return toString(new HashMap<>(3));
     }
 }

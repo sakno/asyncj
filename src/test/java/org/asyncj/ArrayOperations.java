@@ -12,6 +12,7 @@ final class ArrayOperations extends ActiveObject {
         super(TaskExecutor.newSingleThreadExecutor());
     }
 
+    @SuppressWarnings("unchecked")
     private <T> T[] reverseArraySync(final T[] array){
         final T[] result = (T[])Array.newInstance(array.getClass().getComponentType(), array.length);
         for(int i = 0; i < array.length; i++)

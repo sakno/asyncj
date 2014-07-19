@@ -3,7 +3,7 @@ package org.asyncj;
 import java.util.function.Supplier;
 
 /**
- * Represents alternative functional interface to {@link java.util.function.Function} that
+ * Represents alternative to {@link java.util.function.Function} functional interface that
  * supports exception.
  * @author Roman Sakno
  * @version 1.0

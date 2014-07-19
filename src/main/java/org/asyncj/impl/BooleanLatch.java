@@ -1,18 +1,21 @@
 package org.asyncj.impl;
 
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 
 /**
  * Represents boolean latch used for primitive signal-based synchronization.
+ * This class cannot be inherited.
  * @author Roman Sakno
  * @since 1.0
  * @version 1.0
  */
 public final class BooleanLatch extends AbstractQueuedSynchronizer {
 
+    /**
+     * Initializes a new boolean latch in non-signalled state.
+     */
     public BooleanLatch(){
         setState(0);
     }
@@ -24,6 +27,10 @@ public final class BooleanLatch extends AbstractQueuedSynchronizer {
         releaseShared(1);
     }
 
+    /**
+     * Gets state of this latch.
+     * @return {@literal true}, if this object is in signalled state; otherwise, {@literal false}.
+     */
     public final boolean isSignalled(){
         return getState() != 0;
     }

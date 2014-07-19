@@ -4,8 +4,10 @@ package org.asyncj;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 public final class ActiveObjectTest extends Assert {
@@ -60,10 +62,5 @@ public final class ActiveObjectTest extends Assert {
             });
         });
         signaller.await(2, TimeUnit.SECONDS);
-    }
-
-    @Test
-    public void successfulContinuationTest(){
-
     }
 }
