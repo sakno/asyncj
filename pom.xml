@@ -5,10 +5,21 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.asyncj</groupId>
     <artifactId>asyncj-core</artifactId>
+    <name>AsyncJ Framework</name>
+    <description>Framework for writing no-blocking scalable applications</description>
     <version>0.2</version>
     <url>https://github.com/sakno/asyncj</url>
     <packaging>bundle</packaging>
-
+    <scm>
+        <url>https://github.com/sakno/asyncj</url>
+        <connection>scm:git:git://github.com/sakno/asyncj.git</connection>
+    </scm>
+    <developers>
+        <developer>
+            <name>Roman Sakno</name>
+            <email>roman.sakno@gmail.com</email>
+        </developer>
+    </developers>
     <licenses>
         <license>
             <name>MIT License</name>
@@ -147,6 +158,17 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-    <name>AsyncJ Framework</name>
-    <description>Framework for writing no-blocking scalable applications</description>
+    <distributionManagement>
+        <!-- Repository for snapshots -->
+        <snapshotRepository>
+            <id>sonatype-nexus-snapshots</id>
+            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+        </snapshotRepository>
+        <!-- Repository for releases -->
+        <repository>
+            <id>nexus-releases</id>
+            <name>Nexus Release Repository</name>
+            <url>http://oss.sonatype.org/service/local/staging/deploy/maven2/</url>
+        </repository>
+    </distributionManagement>
 </project>
