@@ -125,6 +125,7 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
             case CREATED:
                 state = AsyncResultState.CANCELLED;
                 error = new CancellationException(String.format("Task %s is cancelled." , this));
+                forEach(t->t.cancel(mayInterruptIfRunning));
                 super.clear();
                 signaller.signal();
             case CANCELLED: return true;

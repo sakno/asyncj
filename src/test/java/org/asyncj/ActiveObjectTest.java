@@ -2,14 +2,27 @@ package org.asyncj;
 
 
 import org.asyncj.impl.BooleanLatch;
+import org.asyncj.impl.TaskExecutor;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public final class ActiveObjectTest extends Assert {
+
+    @Test
+    public void stressTest() throws InterruptedException {
+        final TaskExecutor executor = TaskExecutor.newSingleThreadExecutor();
+        final ArrayOperations obj = new ArrayOperations(executor);
+        for(int i = 0; i < 500; i++)
+            obj.reverseArray(new Integer[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
+        while (executor.getActiveTasks() > 0)
+            Thread.sleep(100);
+        assertEquals(0, executor.getActiveTasks());
+    }
 
     @Test
     public void singleAsyncCallTest() throws ExecutionException, InterruptedException {
@@ -22,7 +35,8 @@ public final class ActiveObjectTest extends Assert {
 
     @Test
     public void continuationTest() throws ExecutionException, InterruptedException{
-        final ArrayOperations obj = new ArrayOperations();
+        final TaskExecutor executor = TaskExecutor.newSingleThreadExecutor();
+        final ArrayOperations obj = new ArrayOperations(executor);
         final AsyncResult<Boolean[]> even = obj.reverseArray(new Integer[]{1, 2, 3}).then((Integer[] array)->{
             for(int i = 0; i < array.length; i++)
                 array[i] = array[i] + 2;
@@ -38,6 +52,7 @@ public final class ActiveObjectTest extends Assert {
         assertFalse(result[0]);
         assertTrue(result[1]);
         assertFalse(result[0]);
+        assertEquals(0, executor.getActiveTasks());
     }
 
     @Test
@@ -65,7 +80,8 @@ public final class ActiveObjectTest extends Assert {
 
     @Test
     public void exceptionHandlingTest() throws TimeoutException, InterruptedException, ExecutionException {
-        final ArrayOperations obj = new ArrayOperations();
+        final TaskExecutor executor = TaskExecutor.newSingleThreadExecutor();
+        final ArrayOperations obj = new ArrayOperations(executor);
         final Integer[] arr = null;
         final BooleanLatch latch = new BooleanLatch();
         obj.reverseArray(arr, (a, e)->{
@@ -76,10 +92,12 @@ public final class ActiveObjectTest extends Assert {
         });
         latch.await(2, TimeUnit.SECONDS);
         final String errorMsg =
-                obj.reverseArray(arr).then((Integer[] a)->"Not null", Exception::getMessage).get(2, TimeUnit.SECONDS);
+                obj.reverseArray(arr).then((Integer[] a)->"Not null", Exception::getMessage)
+                        .get(2, TimeUnit.SECONDS);
         assertNotNull(errorMsg);
         assertFalse(errorMsg.isEmpty());
         assertNotEquals("Not null", errorMsg);
+        assertEquals(0, executor.getActiveTasks());
     }
 
     @Test
@@ -92,5 +110,17 @@ public final class ActiveObjectTest extends Assert {
         assertNotNull(errorMsg);
         assertFalse(errorMsg.isEmpty());
         assertNotEquals("Not null", errorMsg);
+    }
+
+    @Test(expected = CancellationException.class)
+    public void cancelationTest() throws InterruptedException, ExecutionException, TimeoutException {
+        final ArrayOperations obj = new ArrayOperations();
+        final Integer[] arr = new Integer[100];
+        for(int i = 0; i< arr.length; i++)
+            arr[i] = i + 10;
+        final AsyncResult<Integer[]> ar = obj.reverseArrayLongTime(arr);
+        ar.cancel(true);
+        final AsyncResult<Integer[]> a = ar.then(ThrowableFunction.<Integer[]>identity());
+        a.get(5, TimeUnit.SECONDS);
     }
 }

@@ -22,6 +22,10 @@ public final class TaskExecutor extends AbstractTaskScheduler {
         this.activeTasks = new ConcurrentHashMap<>(10);
     }
 
+    public int getActiveTasks(){
+        return activeTasks.size();
+    }
+
     /**
      * Creates a new task executor with the given initial
      * parameters and default rejected execution handler.
