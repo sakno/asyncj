@@ -2,7 +2,6 @@ package org.asyncj.impl;
 
 import org.asyncj.TaskScheduler;
 
-import java.util.Objects;
 import java.util.concurrent.CancellationException;
 
 /**
@@ -34,7 +33,6 @@ public abstract class CompletedTask<V> extends Task<V> {
     }
 
     public static <V> CompletedTask<V> failure(final TaskScheduler scheduler, final Exception err){
-        Objects.requireNonNull(err, "err is null.");
         return new CompletedTask<V>(scheduler) {
             @Override
             public V call() throws Exception {

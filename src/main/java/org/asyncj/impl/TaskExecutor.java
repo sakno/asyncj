@@ -7,7 +7,8 @@ import java.util.Objects;
 import java.util.concurrent.*;
 
 /**
- * Represents task
+ * Represents simple task scheduler that represents bridge
+ * between {@link java.util.concurrent.ExecutorService} and {@link org.asyncj.TaskScheduler}.
  * @author Roman Sakno
  * @version 1.0
  * @since 1.0
@@ -55,6 +56,13 @@ public final class TaskExecutor extends AbstractTaskScheduler {
         this(new ThreadPoolExecutor(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory));
     }
 
+    /**
+     * Creates a new cached task scheduler that may use no more than one thread
+     * for executing tasks.
+     * @param threadPriority Thread priority used by scheduler.
+     * @param group Thread group used by scheduler.
+     * @return A new instance of the task scheduler.
+     */
     public static TaskExecutor newSingleThreadExecutor(final int threadPriority,
                                                        final ThreadGroup group) {
         return new TaskExecutor(0, 1, 30, TimeUnit.SECONDS, new SynchronousQueue<>(), r -> {
@@ -66,6 +74,11 @@ public final class TaskExecutor extends AbstractTaskScheduler {
         });
     }
 
+    /**
+     * Creates a new cached thread scheduler that may use no more that on thread for
+     * executing tasks.
+     * @return A new instance of thread executor.
+     */
     public static TaskExecutor newSingleThreadExecutor(){
         return newSingleThreadExecutor(Thread.NORM_PRIORITY, null);
     }
