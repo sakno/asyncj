@@ -4,7 +4,6 @@ import org.asyncj.AsyncResult;
 import org.asyncj.AsyncResultState;
 import org.asyncj.AsyncUtils;
 
-import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.Objects;
 import java.util.concurrent.*;
@@ -62,6 +61,7 @@ public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
                 tfactory);
         activeTasks = new ConcurrentHashMap<>(initialQueueCapacity);
         this.normalPriority = normalPriority;
+
     }
 
     public PriorityTaskExecutor(final int normalPriority,

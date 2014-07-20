@@ -14,6 +14,7 @@ final class ArrayOperations extends ActiveObject {
 
     @SuppressWarnings("unchecked")
     private <T> T[] reverseArraySync(final T[] array){
+        if(array == null) throw new NullPointerException("array is null.");
         final T[] result = (T[])Array.newInstance(array.getClass().getComponentType(), array.length);
         for(int i = 0; i < array.length; i++)
             result[i] = array[array.length - i - 1];

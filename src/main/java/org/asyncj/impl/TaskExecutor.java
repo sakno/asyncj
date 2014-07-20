@@ -65,7 +65,7 @@ public final class TaskExecutor extends AbstractTaskScheduler {
      */
     public static TaskExecutor newSingleThreadExecutor(final int threadPriority,
                                                        final ThreadGroup group) {
-        return new TaskExecutor(0, 1, 30, TimeUnit.SECONDS, new SynchronousQueue<>(), r -> {
+        return new TaskExecutor(0, 1, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), r -> {
             final Thread result = new Thread(group, r);
             result.setDaemon(true);
             result.setPriority(threadPriority);

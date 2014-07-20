@@ -5,8 +5,9 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.asyncj</groupId>
     <artifactId>asyncj-core</artifactId>
-    <version>0.1</version>
+    <version>0.2</version>
     <url>https://github.com/sakno/asyncj</url>
+    <packaging>bundle</packaging>
     <licenses>
         <license>
             <name>MIT License</name>
@@ -20,6 +21,20 @@
     </properties>
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.felix</groupId>
+                <artifactId>maven-bundle-plugin</artifactId>
+                <extensions>true</extensions>
+                <configuration>
+                    <instructions>
+                        <Bundle-SymbolicName>org.asyncj.core</Bundle-SymbolicName>
+                        <!--<Embed-Dependency>*;scope=compile|runtime;optional=false</Embed-Dependency>-->
+                        <Export-Package>
+                            org.asyncj.*
+                        </Export-Package>
+                    </instructions>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
@@ -89,5 +104,4 @@
     </dependencies>
     <name>AsyncJ Framework</name>
     <description>Framework for writing no-blocking scalable applications</description>
-
 </project>
