@@ -7,7 +7,6 @@ import java.util.Iterator;
 import java.util.Objects;
 import java.util.Vector;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -26,7 +25,6 @@ import java.util.function.IntSupplier;
  *         <li>Priority scheduling - helper methods allows to assign priority to the tasks
  *         represented by {@link java.util.concurrent.Callable}.</li>
  *     </ul>
- * </p>
  * @author Roman Sakno
  * @version 1.0
  * @since 1.0
