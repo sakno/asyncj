@@ -1,7 +1,6 @@
 package org.asyncj.impl;
 
 import org.asyncj.AsyncResult;
-import org.asyncj.AsyncResultState;
 
 import java.util.Objects;
 import java.util.concurrent.*;
@@ -20,6 +19,10 @@ public final class TaskExecutor extends AbstractTaskScheduler {
     public TaskExecutor(final ExecutorService executor){
         this.executor = Objects.requireNonNull(executor, "executor is null.");
         this.activeTasks = new ConcurrentHashMap<>(10);
+    }
+
+    public int getActiveTasks(){
+        return activeTasks.size();
     }
 
     /**
@@ -65,7 +68,7 @@ public final class TaskExecutor extends AbstractTaskScheduler {
      */
     public static TaskExecutor newSingleThreadExecutor(final int threadPriority,
                                                        final ThreadGroup group) {
-        return new TaskExecutor(0, 1, 30, TimeUnit.SECONDS, new SynchronousQueue<>(), r -> {
+        return new TaskExecutor(0, 1, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), r -> {
             final Thread result = new Thread(group, r);
             result.setDaemon(true);
             result.setPriority(threadPriority);
@@ -100,12 +103,11 @@ public final class TaskExecutor extends AbstractTaskScheduler {
     }
 
     @Override
-    protected <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task) {
+    protected  <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task) {
         activeTasks.put(task, executor.submit(() -> {
             try {
-                if (task.getAsyncState() == AsyncResultState.CREATED) task.run();
-            }
-            finally {
+                task.run();
+            } finally {
                 activeTasks.remove(task);
             }
         }));
@@ -126,6 +128,15 @@ public final class TaskExecutor extends AbstractTaskScheduler {
         if (ar == null) return false;
         final Future<?> f = activeTasks.remove(ar);
         return f != null && f.cancel(true);
+    }
+
+    /**
+     * Returns a string representation of this executor.
+     * @return A string representation of this executor.
+     */
+    @Override
+    public String toString() {
+        return executor.toString();
     }
 
     /**

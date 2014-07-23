@@ -13,7 +13,6 @@ import java.util.function.IntSupplier;
  * <p>
  *     The active object may use simple task scheduler or priority-based task scheduler. The protected methods simplifies
  *     scheduling of asynchronous tasks.
- * </p>
  * <p>
  *     It is recommended to use the following programming style for active objects:
  *     <ul>
@@ -34,13 +33,13 @@ import java.util.function.IntSupplier;
  *
  *              private &lt;T&gt; T[] reverseArraySync(final T[] array){
  *                  final T[] result = (T[])Array.newInstance(array.getClass().getComponentType(), array.length);
- *                  for(int i = 0; i < array.length; i++)
+ *                  for(int i = 0; i &lt; array.length; i++)
  *                      result[i] = array[array.length - i - 1];
  *                  return result;
  *              }
  *
  *              public &lt;T&gt; AsyncResult&lt;T[]&gt; reverseArray(final T[] array){
- *                  return super.enqueue(()->reverseArraySync(array));
+ *                  return super.enqueue(()-&gt; reverseArraySync(array));
  *              }
  *
  *              public &lt;T&gt; void reverseArray(final T[] array, final AsyncCallback&lt;T[]&gt; callback){
@@ -48,7 +47,6 @@ import java.util.function.IntSupplier;
  *              }
  *      }
  *     </code></pre>
- * </p>
  * <p>
  *  If you want to enable priority-based task scheduling then you should do the following things:
  *  <ul>
@@ -86,13 +84,13 @@ import java.util.function.IntSupplier;
  *
  *      private &lt;T&gt; T[] reverseArraySync(final T[] array){
  *          final T[] result = (T[]) Array.newInstance(array.getClass().getComponentType(), array.length);
- *          for(int i = 0; i < array.length; i++)
+ *          for(int i = 0; i &lt; array.length; i++)
  *              result[i] = array[array.length - i - 1];
  *          return result;
  *      }
  *
- *      public &lt;T&gt; AsyncResult<T[]> reverseArray(final T[] array){
- *          return enqueue(()->reverseArraySync(array), Priority.HIGH);
+ *      public &lt;T&gt; AsyncResult&lt;T[]&gt; reverseArray(final T[] array){
+ *          return enqueue(()-&gt; reverseArraySync(array), Priority.HIGH);
  *      }
  *
  *      public &lt;T&gt; void reverseArray(final T[] array, final AsyncCallback&lt;T[]&gt; callback){
@@ -100,7 +98,6 @@ import java.util.function.IntSupplier;
  *      }
  *  }
  *  </code></pre>
- * </p>
  * @author Roman Sakno
  * @since 1.0
  * @version 1.0
@@ -349,6 +346,7 @@ public abstract class ActiveObject {
      * @param collection The collection to process. Cannot be {@literal null}.
      * @param mr An object that implements map/reduce logic. Cannot be {@literal null}.
      * @param initialValue The initial value passed to the map-reduce algorithm at first iteration.
+     * @param priority The priority of the map-reduce operation.
      * @param <I> Type of the elements in the input collection.
      * @param <O> Type of the reduced result.
      * @param <P> Type of the enum that represents all available priorities.

@@ -1,10 +1,8 @@
 package org.asyncj.impl;
 
 import org.asyncj.AsyncResult;
-import org.asyncj.AsyncResultState;
 import org.asyncj.AsyncUtils;
 
-import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.Objects;
 import java.util.concurrent.*;
@@ -62,6 +60,7 @@ public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
                 tfactory);
         activeTasks = new ConcurrentHashMap<>(initialQueueCapacity);
         this.normalPriority = normalPriority;
+
     }
 
     public PriorityTaskExecutor(final int normalPriority,
@@ -144,10 +143,30 @@ public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
         return new PriorityTaskExecutor(normalPriority, 0, s, 30, TimeUnit.SECONDS, s + 1);
     }
 
+    /**
+     * Gets count of currently running tasks.
+     * @return Count of currently running tasks.
+     */
+    public int getActiveTasks(){
+        return activeTasks.size();
+    }
+
+    /**
+     * Returns {@literal true} if this executor has been shut down.
+     *
+     * @return {@literal true} if this executor has been shut down
+     */
     public boolean isShutdown(){
         return executor.isShutdown();
     }
 
+    /**
+     * Returns {@literal true} if all tasks have completed following shut down.
+     * Note that {@code isTerminated} is never {@literal true} unless
+     * either {@code shutdown} or {@code shutdownNow} was called first.
+     *
+     * @return {@literal true} if all tasks have completed following shut down
+     */
     public boolean isTerminated(){
         return executor.isTerminated();
     }
@@ -162,13 +181,12 @@ public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
 
     @Override
     protected <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task, final int priority) {
-        if(priority < 0) return enqueueTask(task, normalPriority);
+        if (priority < 0) return enqueueTask(task, normalPriority);
         else executor.submit(new PriorityRunnable(priority) {
             @Override
             public void run() {
                 try {
-                    if (task.getAsyncState() == AsyncResultState.CREATED)
-                        task.run();
+                    task.run();
                 } finally {
                     activeTasks.remove(task);
                 }
@@ -190,6 +208,15 @@ public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
     public boolean interrupt(final AsyncResult<?> ar) {
         final Future<?> f = activeTasks.remove(ar);
         return f != null && f.cancel(true);
+    }
+
+    /**
+     * Returns a string representation of this executor.
+     * @return A string representation of this executor.
+     */
+    @Override
+    public String toString() {
+        return executor.toString();
     }
 
     /**

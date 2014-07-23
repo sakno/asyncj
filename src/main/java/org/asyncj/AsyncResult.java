@@ -64,9 +64,9 @@ public interface AsyncResult<V> extends Future<V> {
 
     /**
      * Schedules a new synchronous computation depends on completion of this computation.
-     * @param action
-     * @param <O>
-     * @return
+     * @param action The continuation action in synchronous style. Cannot be {@literal null}.
+     * @param <O> Type of the result in the continuation chain.
+     * @return THe object that represents state of the chained computation.
      */
     default <O> AsyncResult<O> then(final ThrowableFunction<? super V, ? extends O> action){
         return then(action, null);

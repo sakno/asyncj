@@ -25,12 +25,14 @@ public abstract class AbstractTaskScheduler implements TaskScheduler {
      * @return
      */
     @Override
-    public final  <O> CompletedTask<O> successful(final O value) {
-        return CompletedTask.successful(this, value);
+    public final  <O> AsyncResult<O> successful(final O value) {
+        return enqueueTask(this.<O>createTask(() -> value));
     }
 
-    private <O> CompletedTask<O> cancelled(final String reason){
-        return CompletedTask.cancelled(this, reason);
+    private <O> AsyncResult<O> cancelled(final String reason) {
+        return enqueueTask(this.<O>createTask(() -> {
+            throw new CancellationException(reason);
+        }));
     }
 
     /**
@@ -40,8 +42,10 @@ public abstract class AbstractTaskScheduler implements TaskScheduler {
      * @return
      */
     @Override
-    public final  <O> CompletedTask<O> failure(final Exception err) {
-        return CompletedTask.failure(this, err);
+    public final  <O> AsyncResult<O> failure(final Exception err) {
+        return enqueueTask(this.<O>createTask(()->{
+            throw err;
+        }));
     }
 
     protected <V> Task<V> createTask(final Callable<? extends V> task){
