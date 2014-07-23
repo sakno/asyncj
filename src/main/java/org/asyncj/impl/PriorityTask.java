@@ -3,38 +3,57 @@ package org.asyncj.impl;
 import org.asyncj.PriorityTaskScheduler;
 import org.asyncj.TaskScheduler;
 
+import java.util.HashMap;
 import java.util.concurrent.Callable;
+import java.util.function.IntSupplier;
 
 /**
- * Created by rvsakno on 17.07.2014.
+ * Represents priority-based implementation of the asynchronous task.
+ * @param <V> Type of the asynchronous computation result.
+ * @author Roman Sakno
+ * @since 1.0
+ * @version 1.0
  */
-public abstract class PriorityTask<V, P extends Comparable<P>> extends Task<V> implements PriorityTaskScheduler.PriorityItem<P> {
-    private final P priority;
+public abstract class PriorityTask<V> extends Task<V> implements IntSupplier{
+    private final int priority;
 
-    protected PriorityTask(final PriorityTaskScheduler<P> scheduler, final P priority) {
+    /**
+     * Initializes a new asynchronous task with given priority.
+     * @param scheduler Priority-based scheduler that owns by the newly created task. Cannot be {@literal null}.
+     * @param priority The priority of this task.
+     */
+    protected PriorityTask(final PriorityTaskScheduler scheduler, final int priority) {
         this((TaskScheduler) scheduler, priority);
     }
 
-    private PriorityTask(final TaskScheduler scheduler, final P priority){
+    private PriorityTask(final TaskScheduler scheduler, final int priority){
         super(scheduler);
         this.priority = priority;
     }
 
     /**
-     * Gets priority associated with this task.
-     * @return The priority associated with this task.
+     * Gets a priority of this task.
+     * @return A priority of this task.
      */
-    public final P getPriority(){
+    @Override
+    public final int getAsInt() {
         return priority;
     }
 
     @Override
-    <O> PriorityTask<O, P> newChildTask(final TaskScheduler scheduler, final Callable<? extends O> task) {
-        return new PriorityTask<O, P>(scheduler, priority) {
+    final <O> PriorityTask<O> newChildTask(final TaskScheduler scheduler, final Callable<? extends O> task) {
+        return new PriorityTask<O>(scheduler, priority) {
             @Override
             public O call() throws Exception {
                 return task.call();
             }
         };
+    }
+
+    @Override
+    public String toString() {
+        final HashMap<String, Object> fields = new HashMap<>(4);
+        fields.put("priority", priority);
+        return toString(fields);
     }
 }

@@ -1,11 +1,12 @@
 package org.asyncj.impl;
 
 import org.asyncj.AsyncResult;
-import org.asyncj.AsyncResultState;
 import org.asyncj.AsyncUtils;
 
+import java.util.EnumSet;
 import java.util.Objects;
 import java.util.concurrent.*;
+import java.util.function.IntSupplier;
 
 /**
  * Represents preemptive task scheduler based on priority queue.
@@ -18,43 +19,39 @@ import java.util.concurrent.*;
  * @version 1.0
  * @since 1.0
  */
-public final class PriorityTaskExecutor<P extends Comparable<P>> extends AbstractPriorityTaskScheduler<P> {
+public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
 
-    private static abstract class PriorityRunnable<P extends Comparable<P>> implements Runnable, Comparable<PriorityRunnable<P>>, PriorityItem<P> {
-        private final P priority;
+    private static abstract class PriorityRunnable implements Runnable, Comparable<IntSupplier>, IntSupplier {
+        private final int priority;
 
-        protected PriorityRunnable(final P priority) {
+        protected PriorityRunnable(final int priority) {
             this.priority = Objects.requireNonNull(priority, "priority is null.");
         }
 
-        /**
-         * Gets priority associated with this item.
-         *
-         * @return The priority associated with this item.
-         */
         @Override
-        public final P getPriority() {
+        public final int getAsInt() {
             return priority;
         }
 
         @SuppressWarnings("NullableProblems")
         @Override
-        public final int compareTo(final PriorityRunnable<P> task) {
-            return priority.compareTo(Objects.requireNonNull(task, "task is null.").priority);
+        public final int compareTo(final IntSupplier task) {
+            //reverse order because the taks with highest priority should be executed as soon as possible
+            return Integer.compare(Objects.requireNonNull(task, "task is null.").getAsInt(), priority);
         }
     }
 
     private final ThreadPoolExecutor executor;
     private final ConcurrentHashMap<AsyncResult<?>, Future<?>> activeTasks;
+    private final int normalPriority;
 
-    private PriorityTaskExecutor(final P normalPriority,
+    private PriorityTaskExecutor(final int normalPriority,
                                  final int corePoolSize,
                                  final int maximumPoolSize,
                                  final long keepAliveTime,
                                  final TimeUnit unit,
                                  final int initialQueueCapacity,
                                  final ThreadFactory tfactory) {
-        super(normalPriority);
         executor = new ThreadPoolExecutor(corePoolSize,
                 maximumPoolSize,
                 keepAliveTime,
@@ -62,9 +59,11 @@ public final class PriorityTaskExecutor<P extends Comparable<P>> extends Abstrac
                 new PriorityBlockingQueue<>(initialQueueCapacity),
                 tfactory);
         activeTasks = new ConcurrentHashMap<>(initialQueueCapacity);
+        this.normalPriority = normalPriority;
+
     }
 
-    public PriorityTaskExecutor(final P normalPriority,
+    public PriorityTaskExecutor(final int normalPriority,
                                 final int corePoolSize,
                                 final int maximumPoolSize,
                                 final long keepAliveTime,
@@ -82,7 +81,7 @@ public final class PriorityTaskExecutor<P extends Comparable<P>> extends Abstrac
                 AsyncUtils.createDaemonThreadFactory(threadPriority, group, contextClassLoader));
     }
 
-    public PriorityTaskExecutor(final P normalPriority,
+    public PriorityTaskExecutor(final int normalPriority,
                                 final int corePoolSize,
                                 final int maximumPoolSize,
                                 final long keepAliveTime,
@@ -91,10 +90,83 @@ public final class PriorityTaskExecutor<P extends Comparable<P>> extends Abstrac
         this(normalPriority, corePoolSize, maximumPoolSize, keepAliveTime, unit, initialQueueCapacity, Thread.NORM_PRIORITY, null, Thread.currentThread().getContextClassLoader());
     }
 
+    public <P extends Enum<P> & IntSupplier> PriorityTaskExecutor(final P normalPriority,
+                                final int corePoolSize,
+                                final int maximumPoolSize,
+                                final long keepAliveTime,
+                                final TimeUnit unit,
+                                final int initialQueueCapacity,
+                                final int threadPriority,
+                                final ThreadGroup group,
+                                final ClassLoader contextClassLoader) {
+        this(normalPriority.getAsInt(),
+                corePoolSize,
+                maximumPoolSize,
+                keepAliveTime,
+                unit,
+                initialQueueCapacity,
+                threadPriority,
+                group,
+                contextClassLoader);
+    }
+
+    public <P extends Enum<P> & IntSupplier> PriorityTaskExecutor(final P normalPriority,
+                                final int corePoolSize,
+                                final int maximumPoolSize,
+                                final long keepAliveTime,
+                                final TimeUnit unit,
+                                final int initialQueueCapacity) {
+        this(normalPriority.getAsInt(),
+                corePoolSize,
+                maximumPoolSize,
+                keepAliveTime,
+                unit,
+                initialQueueCapacity);
+    }
+
+    /**
+     * Creates a new instance of the priority-based task executor that uses optimal parameters for effective
+     * priority-based load-balancing between multiple threads.
+     * <p>
+     *     The instantiated executor has limitation on the maximum count of active threads used to execute
+     *     priority-based tasks. If threads are not used they may be stopped by the scheduler. The count of threads
+     *     and keep alive time inferred from priority enum semantics.
+     * </p>
+     * @param priorityEnum The type of the enum that represents all possible priorities.
+     * @param normalPriority The priority used to enqueue tasks with default ({@link #AUTO_PRIORITY}) priority.
+     * @param <P> Type of the enum elements.
+     * @return A new instance of the priority-based task executor.
+     */
+    public static <P extends Enum<P> & IntSupplier> PriorityTaskExecutor createOptimalExecutor(final Class<P> priorityEnum,
+                                                                                                        final P normalPriority){
+        final int s = EnumSet.allOf(priorityEnum).size();
+        return new PriorityTaskExecutor(normalPriority, 0, s, 30, TimeUnit.SECONDS, s + 1);
+    }
+
+    /**
+     * Gets count of currently running tasks.
+     * @return Count of currently running tasks.
+     */
+    public int getActiveTasks(){
+        return activeTasks.size();
+    }
+
+    /**
+     * Returns {@literal true} if this executor has been shut down.
+     *
+     * @return {@literal true} if this executor has been shut down
+     */
     public boolean isShutdown(){
         return executor.isShutdown();
     }
 
+    /**
+     * Returns {@literal true} if all tasks have completed following shut down.
+     * Note that {@code isTerminated} is never {@literal true} unless
+     * either {@code shutdown} or {@code shutdownNow} was called first.
+     *
+     * @return {@literal true} if all tasks have completed following shut down
+     */
     public boolean isTerminated(){
         return executor.isTerminated();
     }
@@ -108,13 +180,13 @@ public final class PriorityTaskExecutor<P extends Comparable<P>> extends Abstrac
     }
 
     @Override
-    protected <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task, final P priority) {
-        executor.submit(new PriorityRunnable<P>(priority) {
+    protected <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task, final int priority) {
+        if (priority < 0) return enqueueTask(task, normalPriority);
+        else executor.submit(new PriorityRunnable(priority) {
             @Override
             public void run() {
                 try {
-                    if (task.getAsyncState() == AsyncResultState.CREATED)
-                        task.run();
+                    task.run();
                 } finally {
                     activeTasks.remove(task);
                 }
@@ -136,6 +208,15 @@ public final class PriorityTaskExecutor<P extends Comparable<P>> extends Abstrac
     public boolean interrupt(final AsyncResult<?> ar) {
         final Future<?> f = activeTasks.remove(ar);
         return f != null && f.cancel(true);
+    }
+
+    /**
+     * Returns a string representation of this executor.
+     * @return A string representation of this executor.
+     */
+    @Override
+    public String toString() {
+        return executor.toString();
     }
 
     /**

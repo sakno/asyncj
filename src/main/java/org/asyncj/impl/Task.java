@@ -13,31 +13,52 @@ import java.util.function.Function;
  *     Direct inheritance is used for optimization reasons of task instantiation and memory arrangement. Therefore,
  *     the clients of this class should not add or remove elements from the queue.
  * </p>
+ * @param <V> Type of the asynchronous computation result.
  * @author Roman Sakno
  * @version 1.0
  * @since 1.0
  */
-public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements TraceableAsyncResult<V>, RunnableFuture<V>, Callable<V> {
+public abstract class Task<V> extends SynchronizedStateMachine implements AsyncResult<V>, RunnableFuture<V>, Callable<V> {
     private static boolean useAdvancedStringRepresentation = false;
+
+    private static final int CREATED_STATE = 1;
+    private static final int EXECUTED_STATE = 2;
+    private static final int COMPLETED_STATE = 4;//this is a complex state that covers COMPLETED, CANCELLED and FAILED
+    private static final int ANY_STATE = CREATED_STATE | EXECUTED_STATE | COMPLETED_STATE;
 
     private volatile Exception error;
     private volatile V result;
-    private volatile AsyncResultState state;
     private final TaskScheduler scheduler;
-    private final BooleanLatch signaller;
-    private volatile Object marker;
+    /*
+     * Usually, the task has no more than one children task.
+     * Therefore, it is reasonable not use LinkedList for storing a collection of task children.
+     * Instead of LinkedList the task represents linked list Node itself.
+     * Of course, more that 2-3 children tasks will not be processed effectively.
+     */
+    private volatile Task nextTask;
 
     /**
-     * Initializes a new task enqueued in the specified scheduler.
+     * Initializes a new task prepared for execution in the specified scheduler.
      * @param scheduler The scheduler that owns by the newly created task. Cannot be {@literal null}.
      */
     protected Task(final TaskScheduler scheduler){
+        super(CREATED_STATE);
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler is null.");
         result = null;
         error = null;
-        this.state = AsyncResultState.CREATED;
-        signaller = new BooleanLatch();
-        marker = null;
+        //setState(CREATED_STATE);
+        nextTask = null;
+    }
+
+    private void appendChildTask(final Task childTask){
+        if(nextTask == null) nextTask = childTask;
+        else nextTask.appendChildTask(childTask);
+    }
+
+    private <O> Task<O> createAndAppendChildTask(final Callable<? extends O> task){
+        final Task<O> childTask = newChildTask(scheduler, task);
+        appendChildTask(childTask);
+        return childTask;
     }
 
     /**
@@ -47,7 +68,6 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
      *     By default, {@link #toString()} method of the task returns ID, state and marker.
      * </p>
      */
-    @SuppressWarnings("UnusedDeclaration")
     public static void enableAdvancedStringRepresentation(){
         useAdvancedStringRepresentation = true;
     }
@@ -60,24 +80,24 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
         return ((long)scheduler.hashCode() << 32) | ((long)hashCode() & 0xFFFFFFFL);
     }
 
-    /**
-     * Always returns {@literal false}.
-     * @return {@literal false}.
-     */
-    @Override
-    public final boolean isProxy() {
-        return false;
+    private static boolean isCancellationException(final Exception error){
+        return error instanceof InterruptedException || error instanceof CancellationException;
     }
 
-    @Override
-    public final void setMarker(final Object marker) {
-        this.marker = marker;
+    private static AsyncResultState getAsyncState(final int state, final Exception error){
+        switch (state){
+            case CREATED_STATE: return AsyncResultState.CREATED;
+            case EXECUTED_STATE: return AsyncResultState.EXECUTED;
+            case COMPLETED_STATE:
+                if(error == null) return AsyncResultState.COMPLETED;
+                else if(isCancellationException(error))
+                    return AsyncResultState.CANCELLED;
+                else return AsyncResultState.FAILED;
+                //never happens
+            default: return null;
+        }
     }
 
-    @Override
-    public final Object getMarker() {
-        return marker;
-    }
 
     /**
      * Gets state of this task.
@@ -85,7 +105,7 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
      */
     @Override
     public final AsyncResultState getAsyncState(){
-        return state;
+        return getAsyncState(getState(), error);
     }
 
     /**
@@ -120,22 +140,21 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
      */
     @Override
     public final boolean cancel(final boolean mayInterruptIfRunning) {
-        switch (state){
-            case CREATED:
-                state = AsyncResultState.CANCELLED;
-                error = new CancellationException(String.format("Task %s is cancelled." , this));
-                super.clear();
-                signaller.signal();
-            case CANCELLED: return true;
-            case EXECUTED:
-                if(mayInterruptIfRunning && scheduler.interrupt(this)){
-                    state = AsyncResultState.CANCELLED;
-                    super.clear();
+        return writeOnTransition(ANY_STATE, COMPLETED_STATE, currentState -> {
+            switch (currentState) {
+                case CREATED_STATE:
+                    error = new CancellationException(String.format("%s is cancelled.", this));
+                    if (nextTask != null) nextTask.cancel(mayInterruptIfRunning);
+                    nextTask = null; //help GC
                     return true;
-                }
-                else return false;
-            default: return false;
-        }
+                case EXECUTED_STATE:
+                    return scheduler.interrupt(this);
+                case COMPLETED_STATE:
+                    return isCancellationException(error);
+                default:
+                    return false;
+            }
+        });
     }
 
     /**
@@ -149,7 +168,14 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
      */
     @Override
     public final boolean isDone() {
-        return signaller.isSignalled();
+        return getState() == COMPLETED_STATE;
+    }
+
+    private static <V> V prepareTaskResult(final V result, final Exception error) throws CancellationException, ExecutionException{
+        if(error == null) return result;
+        else if(error instanceof CancellationException) throw (CancellationException)error;
+        else if(error instanceof InterruptedException) throw new CancellationException(error.getMessage());
+        else throw new ExecutionException(error);
     }
 
     /**
@@ -165,11 +191,11 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
      */
     @Override
     public final V get() throws InterruptedException, ExecutionException {
-        signaller.await();
-        switch (state){
-            case CANCELLED: throw new CancellationException();
-            case FAILED: throw new ExecutionException(error);
-            default: return result;
+        acquireSharedInterruptibly(COMPLETED_STATE);
+        try {
+            return prepareTaskResult(result, error);
+        } finally {
+            releaseShared(COMPLETED_STATE);
         }
     }
 
@@ -190,14 +216,12 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
     @SuppressWarnings("NullableProblems")
     @Override
     public final V get(final long timeout, final TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
-        signaller.await(timeout, unit);
-        switch (state) {
-            case CANCELLED:
-                throw new CancellationException();
-            case FAILED:
-                throw new ExecutionException(error);
-            default:
-                return result;
+        tryAcquireSharedNanos(COMPLETED_STATE, unit.toNanos(timeout));
+        try{
+            return prepareTaskResult(result, error);
+        }
+        finally {
+            releaseShared(COMPLETED_STATE);
         }
     }
 
@@ -209,39 +233,47 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
      */
     @Override
     public final boolean isCancelled() {
-        return state == AsyncResultState.CANCELLED;
-    }
-
-    private void complete(final V value){
-        result = value;
-        state = AsyncResultState.COMPLETED;
-    }
-
-    private void fail(final Exception e){
-        error = e;
-        state = (e instanceof InterruptedException) || (e instanceof CancellationException) ? AsyncResultState.CANCELLED : AsyncResultState.FAILED;
+        return isDone() && isCancellationException(error);
     }
 
     /**
-     * Executes the task synchronously.
+     * Executes this task synchronously.
+     * <p>
+     *     This method invokes {@link #call()} synchronously, therefore, it should be executed in the thread
+     *     provided by task scheduler.
+     * </p>
      */
     @Override
     public final void run() {
-        if(isDone()) return;
-        state = AsyncResultState.EXECUTED;
-        try {
-            final V r = call();
-            complete(r);
+        switch (acquireAndGetState(ANY_STATE)) {
+            case CREATED_STATE:
+                try {
+                    result = call();
+                } catch (final Exception e) {
+                    error = e;
+                } finally {
+                    release(COMPLETED_STATE);
+                }
+                if (nextTask != null)
+                    if (isCancellationException(error))
+                        nextTask.cancel(false);
+                    else scheduler.enqueue(nextTask);
+                nextTask = null; //help GC
+                return;
+            default:
+                release(getState());
         }
-        catch (final Exception e) {
-            fail(e);
-        }
-        finally {
-            signaller.signal();
-        }
-        //process all children tasks
-        while (!isEmpty())
-            scheduler.enqueue(poll());
+    }
+
+    /**
+     * Validates state machine transition.
+     * @param from The source state of the task.
+     * @param to The sink state of the task.
+     * @return {@literal true}, if the specified transition is valid; otherwise, {@literal false}.
+     */
+    @Override
+    protected final boolean isValidTransition(final int from, final int to) {
+        return to >= from;
     }
 
     /**
@@ -261,24 +293,25 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
         };
     }
 
-    private <O> Task<O> enqueueChildTask(final Callable<? extends O> task){
-        final Task<O> result = newChildTask(scheduler, task);
-        offer(result);
-        return result;
+    private <O> AsyncResult<O> then(final Callable<? extends O> task) {
+        return writeOnTransition(ANY_STATE, currentState -> {
+            switch (currentState) {
+                case COMPLETED_STATE:
+                    return isCancellationException(error) ? scheduler.failure(error) : scheduler.enqueue(task);
+                case EXECUTED_STATE:
+                case CREATED_STATE:
+                    return createAndAppendChildTask(task);
+                //never happens
+                default:
+                    throw new IllegalStateException(String.format("Invalid task state %s", getAsyncState()));
+            }
+        });
     }
 
-    private <O> AsyncResult<O> then(final Callable<? extends O> task){
-        switch (state){
-            case FAILED:
-            case COMPLETED: return scheduler.enqueue(task);
-            case CREATED:
-            case EXECUTED: return enqueueChildTask(task);
-            case CANCELLED: return scheduler.failure(error);
-            //never happens
-            default: throw new IllegalStateException(String.format("Invalid task state %s", state));
-        }
-    }
-
+    /**
+     * Attaches completion callback to this task.
+     * @param callback The completion callback. Cannot be {@literal null}.
+     */
     @Override
     public final void onCompleted(final AsyncCallback<? super V> callback) {
         Objects.requireNonNull(callback, "callback is null.");
@@ -288,6 +321,15 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
         });
     }
 
+    /**
+     * {@inheritDoc}
+     * @param action The action implementing attached asynchronous computation if this computation
+     *               is completed successfully. Cannot be {@literal null}.
+     * @param errorHandler The action implementing attached asynchronous computation if this computation
+     *               is failed. May be {@literal null}.
+     * @param <O> Type of the attached asynchronous computation result.
+     * @return The object that represents state of the attached asynchronous computation.
+     */
     @Override
     public final  <O> AsyncResult<O> then(final ThrowableFunction<? super V, ? extends O> action,
                                                         final ThrowableFunction<Exception, ? extends O> errorHandler) {
@@ -301,6 +343,12 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
         });
     }
 
+    /**
+     * {@inheritDoc}
+     * @param action
+     * @param <O>
+     * @return
+     */
     @Override
     public final  <O> AsyncResult<O> then(final ThrowableFunction<? super V, ? extends O> action) {
         Objects.requireNonNull(action, "action is null.");
@@ -315,6 +363,7 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
     public final  <O> AsyncResult<O> then(final Function<? super V, AsyncResult<O>> action,
                                    final Function<Exception, AsyncResult<O>> errorHandler) {
         Objects.requireNonNull(action, "action is null.");
+        //synchronization via AQS is not required
         return scheduler.enqueueDirect((TaskScheduler scheduler) -> new ProxyTask<V, O>(scheduler, this) {
             @Override
             protected void run(final V result, final Exception err) {
@@ -327,8 +376,9 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
     }
 
     @Override
-    public final  <O> AsyncResult<O> then(Function<? super V, AsyncResult<O>> action) {
+    public final <O> AsyncResult<O> then(Function<? super V, AsyncResult<O>> action) {
         Objects.requireNonNull(action, "action is null.");
+        //synchronization via AQS is not required
         return scheduler.enqueueDirect((TaskScheduler scheduler) -> new ProxyTask<V, O>(scheduler, this) {
             @Override
             protected void run(final V result, final Exception err) {
@@ -338,18 +388,22 @@ public abstract class Task<V> extends ConcurrentLinkedQueue<Task<?>> implements 
         });
     }
 
+    final String toString(final Map<String, Object> fields){
+        fields.put("state", getAsyncState());
+        if(useAdvancedStringRepresentation){
+            fields.put("result", result);
+            fields.put("error", error);
+            fields.put("hasNoChildren", nextTask == null);
+        }
+        final Collection<String> stringBuilder = new ArrayList<>(fields.size());
+        fields.entrySet()
+                .stream()
+                .forEach(entry -> stringBuilder.add(String.format("%s = %s", entry.getKey(), entry.getValue())));
+        return String.format("Task %s(%s)", getID(), String.join(", ", stringBuilder));
+    }
+
     @Override
-    public final String toString() {
-        return useAdvancedStringRepresentation ?
-                String.format("Task %s(state = %s, marker = %s, result = %s, error = %s)",
-                        getID(),
-                        state,
-                        marker,
-                        result,
-                        error) :
-                String.format("Task %s(state = %s, marker = %s)",
-                        getID(),
-                        state,
-                        marker);
+    public String toString() {
+        return toString(new HashMap<>(3));
     }
 }

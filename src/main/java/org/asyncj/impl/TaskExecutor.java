@@ -1,13 +1,13 @@
 package org.asyncj.impl;
 
 import org.asyncj.AsyncResult;
-import org.asyncj.AsyncResultState;
 
 import java.util.Objects;
 import java.util.concurrent.*;
 
 /**
- * Represents task
+ * Represents simple task scheduler that represents bridge
+ * between {@link java.util.concurrent.ExecutorService} and {@link org.asyncj.TaskScheduler}.
  * @author Roman Sakno
  * @version 1.0
  * @since 1.0
@@ -19,6 +19,10 @@ public final class TaskExecutor extends AbstractTaskScheduler {
     public TaskExecutor(final ExecutorService executor){
         this.executor = Objects.requireNonNull(executor, "executor is null.");
         this.activeTasks = new ConcurrentHashMap<>(10);
+    }
+
+    public int getActiveTasks(){
+        return activeTasks.size();
     }
 
     /**
@@ -55,17 +59,29 @@ public final class TaskExecutor extends AbstractTaskScheduler {
         this(new ThreadPoolExecutor(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory));
     }
 
-    public static TaskExecutor newSingleThreadExecutor(final int priority,
+    /**
+     * Creates a new cached task scheduler that may use no more than one thread
+     * for executing tasks.
+     * @param threadPriority Thread priority used by scheduler.
+     * @param group Thread group used by scheduler.
+     * @return A new instance of the task scheduler.
+     */
+    public static TaskExecutor newSingleThreadExecutor(final int threadPriority,
                                                        final ThreadGroup group) {
-        return new TaskExecutor(0, 1, 30, TimeUnit.SECONDS, new SynchronousQueue<>(), r -> {
+        return new TaskExecutor(0, 1, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), r -> {
             final Thread result = new Thread(group, r);
             result.setDaemon(true);
-            result.setPriority(priority);
+            result.setPriority(threadPriority);
             result.setContextClassLoader(Thread.currentThread().getContextClassLoader());
             return result;
         });
     }
 
+    /**
+     * Creates a new cached thread scheduler that may use no more that on thread for
+     * executing tasks.
+     * @return A new instance of thread executor.
+     */
     public static TaskExecutor newSingleThreadExecutor(){
         return newSingleThreadExecutor(Thread.NORM_PRIORITY, null);
     }
@@ -87,12 +103,11 @@ public final class TaskExecutor extends AbstractTaskScheduler {
     }
 
     @Override
-    protected <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task) {
+    protected  <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task) {
         activeTasks.put(task, executor.submit(() -> {
             try {
-                if (task.getAsyncState() == AsyncResultState.CREATED) task.run();
-            }
-            finally {
+                task.run();
+            } finally {
                 activeTasks.remove(task);
             }
         }));
@@ -113,6 +128,15 @@ public final class TaskExecutor extends AbstractTaskScheduler {
         if (ar == null) return false;
         final Future<?> f = activeTasks.remove(ar);
         return f != null && f.cancel(true);
+    }
+
+    /**
+     * Returns a string representation of this executor.
+     * @return A string representation of this executor.
+     */
+    @Override
+    public String toString() {
+        return executor.toString();
     }
 
     /**
