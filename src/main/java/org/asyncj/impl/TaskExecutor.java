@@ -1,7 +1,6 @@
 package org.asyncj.impl;
 
 import org.asyncj.AsyncResult;
-import org.asyncj.AsyncResultState;
 
 import java.util.Objects;
 import java.util.concurrent.*;
@@ -104,12 +103,11 @@ public final class TaskExecutor extends AbstractTaskScheduler {
     }
 
     @Override
-    protected <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task) {
+    protected  <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task) {
         activeTasks.put(task, executor.submit(() -> {
             try {
-                if (task.getAsyncState() == AsyncResultState.CREATED) task.run();
-            }
-            finally {
+                task.run();
+            } finally {
                 activeTasks.remove(task);
             }
         }));
@@ -130,6 +128,15 @@ public final class TaskExecutor extends AbstractTaskScheduler {
         if (ar == null) return false;
         final Future<?> f = activeTasks.remove(ar);
         return f != null && f.cancel(true);
+    }
+
+    /**
+     * Returns a string representation of this executor.
+     * @return A string representation of this executor.
+     */
+    @Override
+    public String toString() {
+        return executor.toString();
     }
 
     /**
