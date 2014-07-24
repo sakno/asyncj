@@ -6,7 +6,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.*;
-import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 import java.util.function.Function;
 
 /**
@@ -15,9 +14,9 @@ import java.util.function.Function;
  * @version 1.0
  * @since 1.0
  */
-abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements AsyncResult<O>, RunnableFuture<O> {
+abstract class ProxyTask<I, O> extends SynchronizedStateMachine implements AsyncResult<O>, RunnableFuture<O> {
 
-    private static final int PENDING = 1, //represents inital state of the proxy task
+    private static final int PENDING = 1, //represents initial state of the proxy task
                              CANCELLED = 2, //proxy task is cancelled
                              WRAPPED = 4, //proxy task wraps another asynchronous result
                              ANY_STATE = PENDING | CANCELLED | WRAPPED;
@@ -28,74 +27,21 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
     private volatile AsyncResult<O> underlyingTask;
 
     protected ProxyTask(final TaskScheduler scheduler, final AsyncResult<I> parent){
+        super(PENDING);
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler is null.");
         this.parent = Objects.requireNonNull(parent, "parent task is null.");
         setState(PENDING);
     }
 
     /**
-     * Attempts to acquire exclusive access to the fields of this task
-     * or blocks the current thread until the task will not be transited to the specified state.
-     * @param expectedState The state of the task expected by the caller code.
-     * @return {@literal true} if this task is in requested state; otherwise, {@literal false}, and
-     * caller thread join into waiting loop.
+     * Validates state machine transition.
+     * @param from The source state of the task.
+     * @param to The sink state of the task.
+     * @return {@literal true}, if the specified transition is valid; otherwise, {@literal false}.
      */
     @Override
-    protected final boolean tryAcquire(final int expectedState) {
-        final Thread currentThread = Thread.currentThread(), ownerThread = getExclusiveOwnerThread();
-        if((expectedState & getState()) == 0) return false;
-        else if(currentThread == ownerThread || ownerThread == null){
-            setExclusiveOwnerThread(currentThread);
-            return true;
-        }
-        else return false;
-    }
-
-    /**
-     * Releases exclusive lock to the fields of this task and assigns
-     * a new task state.
-     * @param newState A new task state.
-     * @return {@literal true}, if the specified state is supported by transitive; otherwise, {@literal false}.
-     */
-    @Override
-    protected final boolean tryRelease(final int newState) {
-        int currentState;
-        do {
-            currentState = getState();
-            /*
-             * Possible transitions:
-             * PENDING -> PENDING
-             * PENDING -> CANCELLED
-             * PENDING -> WRAPPED
-             */
-            if(currentState > PENDING && currentState != newState) return false;
-        }
-        while (!compareAndSetState(currentState, newState)); //set new task state
-        return true;
-    }
-
-    /**
-     * Attempts to acquire non-exclusive lock for read-only access to the
-     * fields of this task.
-     * @param expectedState The state of the task expected by the caller code.
-     * @return {@code 1}, if read lock is acquired successfully; otherwise, {@code -1},
-     * and caller thread join into waiting loop.
-     */
-    @Override
-    protected final int tryAcquireShared(final int expectedState) {
-        return tryAcquire(expectedState) ? 1 : -1;
-    }
-
-    /**
-     * Releases non-exclusive lock for read-only access to the fields of
-     * this task and assigns
-     * a new task state.
-     * @param newState A new task state.
-     * @return {@literal true}, if the specified state is supported by transitive; otherwise, {@literal false}.
-     */
-    @Override
-    protected final boolean tryReleaseShared(final int newState) {
-        return tryRelease(newState);
+    protected final boolean isValidTransition(int from, int to) {
+        return from == PENDING || to == from;
     }
 
     /**
@@ -110,11 +56,25 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
         return this.scheduler == scheduler;
     }
 
+    /**
+     * Informs this task about parent task completion.
+     * <p>
+     *     It is allowed to use {@link #complete(org.asyncj.AsyncResult)} or {@link #failure(Exception)}
+     *     methods only inside of the overridden version of this method.
+     * </p>
+     * @param result The result of the parent task.
+     * @param err The error produced by the parent task.
+     */
     protected abstract void run(final I result, final Exception err);
+
+    private void atomicRun(final I result, final Exception err) {
+        writeOnTransition(ANY_STATE, WRAPPED, (int currentState) -> {
+            if (currentState == PENDING) run(result, err);
+        });
+    }
 
     protected final void complete(final AsyncResult<O> ar) {
         underlyingTask = ar;
-        releaseShared(1);
     }
 
     protected final void failure(final Exception err){
@@ -127,7 +87,7 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
      */
     @Override
     public final void run() {
-        parent.onCompleted(this::run);
+        parent.onCompleted(this::atomicRun);
     }
 
     /**
@@ -153,13 +113,7 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
      */
     @Override
     public final boolean cancel(final boolean mayInterruptIfRunning) {
-        acquire(ANY_STATE); //expects any state
-        try{
-            return underlyingTask == null || underlyingTask.cancel(mayInterruptIfRunning);
-        }
-        finally {
-            release(CANCELLED);
-        }
+        return readOnTransition(ANY_STATE, CANCELLED, currentState -> underlyingTask == null || underlyingTask.cancel(mayInterruptIfRunning));
     }
 
     /**
@@ -234,14 +188,14 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
 
     private O get(final long nanos) throws InterruptedException, ExecutionException, TimeoutException {
         final Instant now = Instant.now();
-        if (tryAcquireSharedNanos(WRAPPED, nanos))
-            try {
-                final Duration timeout = Duration.between(now, Instant.now());
-                if (!timeout.isNegative())
-                    return underlyingTask.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
-            } finally {
-                releaseShared(WRAPPED);
-            }
+        tryAcquireSharedNanos(WRAPPED, nanos);
+        try {
+            final Duration timeout = Duration.between(now, Instant.now());
+            if (!timeout.isNegative())
+                return underlyingTask.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        } finally {
+            releaseShared(WRAPPED);
+        }
         throw new TimeoutException();
     }
 
@@ -277,9 +231,8 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
     public final  <O1> AsyncResult<O1> then(final Function<? super O, AsyncResult<O1>> action,
                                             final Function<Exception, AsyncResult<O1>> errorHandler) {
         Objects.requireNonNull(action, "action is null.");
-        acquireShared(ANY_STATE);
-        try {
-            switch (getState()){
+        return readOnTransition(ANY_STATE, (int currentState) -> {
+            switch (currentState) {
                 case PENDING:
                     return scheduler.enqueueDirect((TaskScheduler scheduler) -> new ProxyTask<O, O1>(scheduler, this) {
                         @Override
@@ -295,96 +248,88 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
                 case WRAPPED:
                     return underlyingTask.then(action, errorHandler);
                 //never happens
-                default: throw createIllegalStateException();
+                default:
+                    throw createIllegalStateException();
             }
-        }
-        finally {
-            releaseShared(getState());
-        }
+        });
     }
 
     @Override
     public final  <O1> AsyncResult<O1> then(final Function<? super O, AsyncResult<O1>> action) {
         Objects.requireNonNull(action, "action is null.");
-        acquireShared(ANY_STATE);
-        try{
-            switch (getState()){
-                case PENDING: return scheduler.enqueueDirect((TaskScheduler scheduler) -> new ProxyTask<O, O1>(scheduler, this) {
-                    @Override
-                    protected void run(final O result, final Exception err) {
-                        if (err != null) super.failure(err);
-                        else super.complete(action.apply(result));
-                    }
-                });
+        return readOnTransition(ANY_STATE, (int currentState) -> {
+            switch (currentState) {
+                case PENDING:
+                    return scheduler.enqueueDirect((TaskScheduler scheduler) -> new ProxyTask<O, O1>(scheduler, this) {
+                        @Override
+                        protected void run(final O result, final Exception err) {
+                            if (err != null) super.failure(err);
+                            else super.complete(action.apply(result));
+                        }
+                    });
                 case CANCELLED:
                     return scheduler.<O1>failure(createCancellationException());
                 case WRAPPED:
                     return underlyingTask.then(action);
                 //never happens
-                default: throw createIllegalStateException();
+                default:
+                    throw createIllegalStateException();
             }
-        }
-        finally {
-            releaseShared(getState());
-        }
+        });
     }
 
     @Override
     public final  <O1> AsyncResult<O1> then(final ThrowableFunction<? super O, ? extends O1> action,
                                             final ThrowableFunction<Exception, ? extends O1> errorHandler) {
         Objects.requireNonNull(action, "action is null.");
-        acquireShared(ANY_STATE);
-        try {
-            switch (getState()){
+        return readOnTransition(ANY_STATE, (int currentState) -> {
+            switch (currentState) {
                 case PENDING:
                     final Function<Exception, AsyncResult<O1>> alternative = errorHandler != null ?
-                        (Exception err)->{
+                            (Exception err) -> {
                                 try {
                                     return scheduler.successful(errorHandler.apply(err));
-                                }
-                                catch (final Exception e) {
+                                } catch (final Exception e) {
                                     return scheduler.failure(e);
                                 }
-                            }: null;
+                            } : null;
                     return then((O value) -> {
                         try {
                             return scheduler.successful(action.apply(value));
-                        }
-                        catch (final Exception err) {
+                        } catch (final Exception err) {
                             return scheduler.failure(err);
                         }
                     }, alternative);
-                case CANCELLED: return scheduler.<O1>failure(createCancellationException());
-                case WRAPPED: return underlyingTask.then(action, errorHandler);
-                default: throw createIllegalStateException();
+                case CANCELLED:
+                    return scheduler.<O1>failure(createCancellationException());
+                case WRAPPED:
+                    return underlyingTask.then(action, errorHandler);
+                default:
+                    throw createIllegalStateException();
             }
-        }
-        finally {
-            releaseShared(getState());
-        }
+        });
     }
 
     @Override
     public final <O1> AsyncResult<O1> then(final ThrowableFunction<? super O, ? extends O1> action) {
-        acquireShared(ANY_STATE);
-        try {
-            switch (getState()){
-                case PENDING: return then((O value) -> {
-                    try {
-                        return scheduler.successful(action.apply(value));
-                    }
-                    catch (final Exception err) {
-                        return scheduler.failure(err);
-                    }
-                });
-                case WRAPPED: return underlyingTask.then(action);
-                case CANCELLED: return scheduler.<O1>failure(createCancellationException());
-                default: throw createIllegalStateException();
+        return readOnTransition(ANY_STATE, (int currentState) -> {
+            switch (currentState) {
+                case PENDING:
+                    return then((O value) -> {
+                        try {
+                            return scheduler.successful(action.apply(value));
+                        } catch (final Exception err) {
+                            return scheduler.<O1>failure(err);
+                        }
+                    });
+                case WRAPPED:
+                    return underlyingTask.then(action);
+                case CANCELLED:
+                    return scheduler.<O1>failure(createCancellationException());
+                default:
+                    throw createIllegalStateException();
             }
-        }
-        finally {
-            releaseShared(getState());
-        }
+        });
     }
 
     private static <O> Function<TaskScheduler, ProxyTask<O, Void>> createCallbackTaskFactory(final AsyncResult<O> parent,
@@ -402,9 +347,8 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
     @Override
     public final void onCompleted(final AsyncCallback<? super O> callback) {
         Objects.requireNonNull(callback, "callback is null.");
-        acquireShared(ANY_STATE);
-        try {
-            switch (getState()) {
+        readOnTransition(ANY_STATE, (int currentState) -> {
+            switch (currentState) {
                 case PENDING:
                     scheduler.enqueueDirect(createCallbackTaskFactory(this, callback));
                     return;
@@ -413,10 +357,10 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
                     return;
                 case CANCELLED:
                     scheduler.<O>failure(createCancellationException()).onCompleted(callback);
+                default:
+                    throw createIllegalStateException();
             }
-        } finally {
-            releaseShared(getState());
-        }
+        });
     }
 
     @Override

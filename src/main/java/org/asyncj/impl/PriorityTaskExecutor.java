@@ -21,29 +21,57 @@ import java.util.function.IntSupplier;
  */
 public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
 
-    private static abstract class PriorityRunnable implements Runnable, Comparable<IntSupplier>, IntSupplier {
+    private static final class PriorityFutureTask<V> extends FutureTask<V> implements Comparable<PriorityFutureTask> {
         private final int priority;
 
-        protected PriorityRunnable(final int priority) {
-            this.priority = Objects.requireNonNull(priority, "priority is null.");
+        public PriorityFutureTask(final Runnable task, final V value, final int priority) {
+            super(task, value);
+            this.priority = priority;
         }
 
         @Override
-        public final int getAsInt() {
-            return priority;
-        }
-
-        @SuppressWarnings("NullableProblems")
-        @Override
-        public final int compareTo(final IntSupplier task) {
-            //reverse order because the taks with highest priority should be executed as soon as possible
-            return Integer.compare(Objects.requireNonNull(task, "task is null.").getAsInt(), priority);
+        public int compareTo(final PriorityFutureTask o) {
+            return Integer.compare(o.priority, priority);
         }
     }
 
-    private final ThreadPoolExecutor executor;
-    private final ConcurrentHashMap<AsyncResult<?>, Future<?>> activeTasks;
-    private final int normalPriority;
+    private static final class PriorityThreadPoolExecutor extends ThreadPoolExecutor{
+        public final int normalPriority;
+
+        public PriorityThreadPoolExecutor(final int normalPriority,
+                                          final int corePoolSize,
+                                          final int maximumPoolSize,
+                                          final long keepAliveTime,
+                                          final TimeUnit unit,
+                                          final int initialQueueCapacity,
+                                          final ThreadFactory tfactory){
+            super(corePoolSize,
+                    maximumPoolSize,
+                    keepAliveTime,
+                    unit,
+                    new PriorityBlockingQueue<>(initialQueueCapacity),
+                    tfactory);
+            this.normalPriority = normalPriority;
+        }
+
+        private <T> PriorityFutureTask<T> newTaskFor(final Runnable runnable, final T value, final int priority) {
+            return new PriorityFutureTask<>(runnable, value, priority);
+        }
+
+        @Override
+        protected <T> RunnableFuture<T> newTaskFor(final Runnable runnable, final T value) {
+            return newTaskFor(runnable, value, normalPriority);
+        }
+
+        public Future submit(final Runnable task, final int priority) {
+            final RunnableFuture<Void> ftask = newTaskFor(task, null, priority);
+            execute(ftask);
+            return ftask;
+        }
+    }
+
+    private final PriorityThreadPoolExecutor executor;
+    private final ConcurrentHashMap<AsyncResult<?>, Future> activeTasks;
 
     private PriorityTaskExecutor(final int normalPriority,
                                  final int corePoolSize,
@@ -52,15 +80,14 @@ public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
                                  final TimeUnit unit,
                                  final int initialQueueCapacity,
                                  final ThreadFactory tfactory) {
-        executor = new ThreadPoolExecutor(corePoolSize,
+        executor = new PriorityThreadPoolExecutor(normalPriority,
+                corePoolSize,
                 maximumPoolSize,
                 keepAliveTime,
                 unit,
-                new PriorityBlockingQueue<>(initialQueueCapacity),
+                initialQueueCapacity,
                 tfactory);
         activeTasks = new ConcurrentHashMap<>(initialQueueCapacity);
-        this.normalPriority = normalPriority;
-
     }
 
     public PriorityTaskExecutor(final int normalPriority,
@@ -132,14 +159,12 @@ public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
      *     priority-based tasks. If threads are not used they may be stopped by the scheduler. The count of threads
      *     and keep alive time inferred from priority enum semantics.
      * </p>
-     * @param priorityEnum The type of the enum that represents all possible priorities.
      * @param normalPriority The priority used to enqueue tasks with default ({@link #AUTO_PRIORITY}) priority.
      * @param <P> Type of the enum elements.
      * @return A new instance of the priority-based task executor.
      */
-    public static <P extends Enum<P> & IntSupplier> PriorityTaskExecutor createOptimalExecutor(final Class<P> priorityEnum,
-                                                                                                        final P normalPriority){
-        final int s = EnumSet.allOf(priorityEnum).size();
+    public static <P extends Enum<P> & IntSupplier> PriorityTaskExecutor createOptimalExecutor(final P normalPriority) {
+        final int s = EnumSet.allOf(normalPriority.getClass()).size();
         return new PriorityTaskExecutor(normalPriority, 0, s, 30, TimeUnit.SECONDS, s + 1);
     }
 
@@ -181,17 +206,14 @@ public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
 
     @Override
     protected <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task, final int priority) {
-        if (priority < 0) return enqueueTask(task, normalPriority);
-        else executor.submit(new PriorityRunnable(priority) {
-            @Override
-            public void run() {
-                try {
-                    task.run();
-                } finally {
-                    activeTasks.remove(task);
-                }
+        if (priority < 0) return enqueueTask(task, executor.normalPriority);
+        else activeTasks.put(task, executor.submit(() -> {
+            try {
+                task.run();
+            } finally {
+                activeTasks.remove(task);
             }
-        });
+        }, priority));
         return task;
     }
 

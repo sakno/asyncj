@@ -38,7 +38,7 @@ public abstract class AbstractPriorityTaskScheduler extends AbstractTaskSchedule
 
     @Override
     protected final  <V> Task<V> createTask(final Callable<? extends V> task) {
-        return createTask(task, AUTO_PRIORITY);
+        return createTask(task, task instanceof IntSupplier ? ((IntSupplier) task).getAsInt() : AUTO_PRIORITY);
     }
 
     @SuppressWarnings("unchecked")

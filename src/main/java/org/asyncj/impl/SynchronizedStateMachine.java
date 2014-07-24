@@ -1,6 +1,7 @@
 package org.asyncj.impl;
 
 import java.util.concurrent.locks.AbstractQueuedSynchronizer;
+import java.util.function.IntConsumer;
 import java.util.function.IntFunction;
 
 /**
@@ -141,6 +142,26 @@ abstract class SynchronizedStateMachine extends AbstractQueuedSynchronizer {
         }
     }
 
+    protected final void readOnTransition(final int expectedState, final IntConsumer transition) {
+        acquireShared(expectedState);
+        final int currentState = getState();
+        try {
+            transition.accept(currentState);
+        } finally {
+            releaseShared(currentState);
+        }
+    }
+
+    protected final void writeOnTransition(final int expectedState, final int newState, final IntConsumer transition){
+        acquire(expectedState);
+        try{
+            transition.accept(getState());
+        }
+        finally {
+            release(newState);
+        }
+    }
+
     protected final <T> T readOnTransition(final int expectedState, final int newState, final IntFunction<T> transition){
         acquireShared(expectedState);
         try{
@@ -151,6 +172,12 @@ abstract class SynchronizedStateMachine extends AbstractQueuedSynchronizer {
         }
     }
 
+    /**
+     * Acquires exclusive lock for read/write operations to the fields of the derived class and
+     * returns the state after locking.
+     * @param expectedState The state of the task expected by the caller code.
+     * @return The actual state of this state machine.
+     */
     protected final int acquireAndGetState(final int expectedState){
         acquire(expectedState);
         return getState();

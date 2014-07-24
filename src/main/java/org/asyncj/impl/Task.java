@@ -140,7 +140,7 @@ public abstract class Task<V> extends SynchronizedStateMachine implements AsyncR
      */
     @Override
     public final boolean cancel(final boolean mayInterruptIfRunning) {
-        return writeOnTransition(ANY_STATE, COMPLETED_STATE, currentState -> {
+        return writeOnTransition(ANY_STATE, COMPLETED_STATE, (int currentState) -> {
             switch (currentState) {
                 case CREATED_STATE:
                     error = new CancellationException(String.format("%s is cancelled.", this));

@@ -3,10 +3,9 @@ package org.asyncj;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Objects;
+import java.util.Vector;
 import java.util.concurrent.Callable;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.function.IntSupplier;
+import java.util.function.*;
 
 /**
  * Represents active object which decouples method execution from method invocation and resides in their own thread of control.
@@ -109,6 +108,7 @@ public abstract class ActiveObject {
 
     /**
      * Initializes a new active object with the specified scheduler used for executing asynchronous computation.
+     *
      * @param scheduler Task scheduler to be used for executing asynchronous computation execute by this active object. Cannot be {@literal null}.
      * @throws java.lang.NullPointerException {@code scheduler} is {@literal null}.
      */
@@ -116,10 +116,15 @@ public abstract class ActiveObject {
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler is null.");
     }
 
+    private <T, P extends Enum<P> & IntSupplier> AsyncResult<T> prioritizeScalar(final T value, final P priority) {
+        return enqueue(() -> value, priority);
+    }
+
     /**
      * Wraps scalar object into its asynchronous representation.
+     *
      * @param value The value to wrap.
-     * @param <O> The type of the value to wrap.
+     * @param <O>   The type of the value to wrap.
      * @return Already completed asynchronous result that represents passed object.
      */
     protected final <O> AsyncResult<O> successful(final O value) {
@@ -128,6 +133,7 @@ public abstract class ActiveObject {
 
     /**
      * Wraps exception into its asynchronous representation.
+     *
      * @param err An instance of the exception. Cannot be {@literal null}.
      * @param <O> Type of the asynchronous computation result.
      * @return Already completed asynchronous result that represents passed exception.
@@ -139,11 +145,12 @@ public abstract class ActiveObject {
     /**
      * Enqueue a new task for asynchronous execution.
      * <p>
-     *     Call {@link #enqueue(java.util.concurrent.Callable, Enum)} instead of this method
-     *     if this active object use priority-based task scheduler.
+     * Call {@link #enqueue(java.util.concurrent.Callable, Enum)} instead of this method
+     * if this active object use priority-based task scheduler.
      * </p>
+     *
      * @param task The task to schedule. Cannot be {@literal null}.
-     * @param <O> Type of the computation result.
+     * @param <O>  Type of the computation result.
      * @return An object that represents state of the asynchronous computation.
      * @see #enqueue(java.util.concurrent.Callable, Enum)
      */
@@ -154,13 +161,14 @@ public abstract class ActiveObject {
     /**
      * Enqueue a new task for asynchronous execution with given priority.
      * <p>
-     *     Call {@link #enqueue(java.util.concurrent.Callable)} instead of this method
-     *     if this active object don't use priority-based task scheduler.
+     * Call {@link #enqueue(java.util.concurrent.Callable)} instead of this method
+     * if this active object don't use priority-based task scheduler.
      * </p>
-     * @param task The task to schedule. Cannot be {@literal null}.
+     *
+     * @param task     The task to schedule. Cannot be {@literal null}.
      * @param priority The priority of the task. Cannot be {@literal null}.
-     * @param <O> Type of the computation result.
-     * @param <P> Type of the enum that represents all available priorities.
+     * @param <O>      Type of the computation result.
+     * @param <P>      Type of the enum that represents all available priorities.
      * @return An object that represents state of the asynchronous computation.
      * @see #enqueue(java.util.concurrent.Callable)
      */
@@ -171,17 +179,18 @@ public abstract class ActiveObject {
     /**
      * Enqueue a new callback for asynchronous execution.
      * <p>
-     *     Call {@link #enqueue(AsyncCallback, Object, Enum)} instead of this method
-     *     if this active object use priority-based task scheduler.
+     * Call {@link #enqueue(AsyncCallback, Object, Enum)} instead of this method
+     * if this active object use priority-based task scheduler.
      * </p>
+     *
      * @param callback The callback to schedule. Cannot be {@literal null}.
-     * @param value The value to be passed into the callback at execution time.
-     * @param <I> Type of the value to be passed into the callback at execution time.
+     * @param value    The value to be passed into the callback at execution time.
+     * @param <I>      Type of the value to be passed into the callback at execution time.
      * @see #enqueue(AsyncCallback, Object, Enum)
      */
     protected final <I> void enqueue(final AsyncCallback<? super I> callback, final I value) {
         Objects.requireNonNull(callback, "callback is null.");
-        enqueue(() -> {
+        this.<Void>enqueue(() -> {
             callback.invoke(value, null);
             return null;
         });
@@ -190,19 +199,20 @@ public abstract class ActiveObject {
     /**
      * Enqueue a new callback for asynchronous execution with given priority.
      * <p>
-     *     Call {@link #enqueue(AsyncCallback, Object)} instead of this method
-     *     if this active object don't use priority-based task scheduler.
+     * Call {@link #enqueue(AsyncCallback, Object)} instead of this method
+     * if this active object don't use priority-based task scheduler.
      * </p>
+     *
      * @param callback The callback to schedule. Cannot be {@literal null}.
-     * @param value The value to be passed into the callback at execution time.
+     * @param value    The value to be passed into the callback at execution time.
      * @param priority The priority of the task. Cannot be {@literal null}.
-     * @param <I> Type of the value to be passed into the callback at execution time.
-     * @param <P> Type of the enum that represents all available priorities.
+     * @param <I>      Type of the value to be passed into the callback at execution time.
+     * @param <P>      Type of the enum that represents all available priorities.
      * @see #enqueue(AsyncCallback, Object)
      */
     protected final <I, P extends Enum<P> & IntSupplier> void enqueue(final AsyncCallback<? super I> callback, final I value, final P priority) {
         Objects.requireNonNull(callback, "callback is null.");
-        enqueue(() -> {
+        this.<Void, P>enqueue(() -> {
             callback.invoke(value, null);
             return null;
         }, priority);
@@ -211,16 +221,17 @@ public abstract class ActiveObject {
     /**
      * Enqueue a new callback for asynchronous computation.
      * <p>
-     *     Call {@link #enqueue(AsyncCallback, java.lang.Exception, Enum)} instead of this method
-     *     if this active object use priority-based task scheduler.
+     * Call {@link #enqueue(AsyncCallback, java.lang.Exception, Enum)} instead of this method
+     * if this active object use priority-based task scheduler.
      * </p>
+     *
      * @param callback The callback to schedule. Cannot be {@literal null}.
-     * @param err An instance of the exception to be passed into callback at execution time.
+     * @param err      An instance of the exception to be passed into callback at execution time.
      * @see #enqueue(AsyncCallback, Exception, Enum)
      */
     protected final void enqueue(final AsyncCallback<?> callback, final Exception err) {
         Objects.requireNonNull(callback, "callback is null.");
-        enqueue(() -> {
+        this.<Void>enqueue(() -> {
             callback.invoke(null, err);
             return null;
         });
@@ -229,18 +240,19 @@ public abstract class ActiveObject {
     /**
      * Enqueue a new callback for asynchronous computation with given priority.
      * <p>
-     *     Call {@link #enqueue(AsyncCallback, java.lang.Exception)} instead of this method
-     *     if this active object don't use priority-based task scheduler.
+     * Call {@link #enqueue(AsyncCallback, java.lang.Exception)} instead of this method
+     * if this active object don't use priority-based task scheduler.
      * </p>
+     *
      * @param callback The callback to schedule. Cannot be {@literal null}.
-     * @param err An instance of the exception to be passed into callback at execution time.
+     * @param err      An instance of the exception to be passed into callback at execution time.
      * @param priority The priority of the task. Cannot be {@literal null}.
-     * @param <P> Type of the enum that represents all available priorities.
+     * @param <P>      Type of the enum that represents all available priorities.
      * @see #enqueue(AsyncCallback, java.lang.Exception)
      */
-    protected final <P extends Enum<P> & IntSupplier> void enqueue(final AsyncCallback<?> callback, final Exception err, final P priority){
+    protected final <P extends Enum<P> & IntSupplier> void enqueue(final AsyncCallback<?> callback, final Exception err, final P priority) {
         Objects.requireNonNull(callback, "callback is null.");
-        enqueue(()->{
+        this.<Void, P>enqueue(() -> {
             callback.invoke(null, err);
             return null;
         }, priority);
@@ -248,11 +260,12 @@ public abstract class ActiveObject {
 
     /**
      * Iterates over collection and performs filtering and summary operation.
-     * @param collection The collection to process. Cannot be {@literal null}.
-     * @param mr An object that implements map/reduce logic. Cannot be {@literal null}.
+     *
+     * @param collection   The collection to process. Cannot be {@literal null}.
+     * @param mr           An object that implements map/reduce logic. Cannot be {@literal null}.
      * @param initialValue The initial value passed to the map-reduce algorithm at first iteration.
-     * @param <I> Type of the elements in the input collection.
-     * @param <O> Type of the reduced result.
+     * @param <I>          Type of the elements in the input collection.
+     * @param <O>          Type of the reduced result.
      * @return An object that represents asynchronous result of the map-reduce algorithm.
      */
     protected final <I, O> AsyncResult<O> mapReduce(final Iterator<? extends I> collection,
@@ -264,14 +277,15 @@ public abstract class ActiveObject {
     /**
      * Iterates over collection and performs filtering and summary operation.
      * <p>
-     *     Call {@link #mapReduce(java.util.Iterator, java.util.function.BiFunction, Object, Enum)} instead of this method
-     *     if this active object use priority-based task scheduler.
+     * Call {@link #mapReduce(java.util.Iterator, java.util.function.BiFunction, Object, Enum)} instead of this method
+     * if this active object use priority-based task scheduler.
      * </p>
-     * @param collection The collection to process. Cannot be {@literal null}.
-     * @param mr An object that implements map/reduce logic. Cannot be {@literal null}.
+     *
+     * @param collection   The collection to process. Cannot be {@literal null}.
+     * @param mr           An object that implements map/reduce logic. Cannot be {@literal null}.
      * @param initialValue The initial value passed to the map-reduce algorithm at first iteration.
-     * @param <I> Type of the elements in the input collection.
-     * @param <O> Type of the reduced result.
+     * @param <I>          Type of the elements in the input collection.
+     * @param <O>          Type of the reduced result.
      * @return An object that represents asynchronous result of the map-reduce algorithm.
      */
     protected final <I, O> AsyncResult<O> mapReduce(final Iterator<? extends I> collection,
@@ -283,33 +297,34 @@ public abstract class ActiveObject {
     /**
      * Iterates over collection and performs filtering and summary operation.
      * <p>
-     *     Call {@link #mapReduce(java.util.Iterator, java.util.function.BiFunction, Object)} instead of this method
-     *     if this active object don't use priority-based task scheduler.
+     * Call {@link #mapReduce(java.util.Iterator, java.util.function.BiFunction, Object)} instead of this method
+     * if this active object don't use priority-based task scheduler.
      * </p>
-     * @param collection The collection to process. Cannot be {@literal null}.
-     * @param mr An object that implements map/reduce logic. Cannot be {@literal null}.
+     *
+     * @param collection   The collection to process. Cannot be {@literal null}.
+     * @param mr           An object that implements map/reduce logic. Cannot be {@literal null}.
      * @param initialValue The initial value passed to the map-reduce algorithm at first iteration.
-     * @param priority The priority of the map-reduce computation.
-     * @param <I> Type of the elements in the input collection.
-     * @param <O> Type of the reduced result.
-     * @param <P> Type of the enum that represents all available priorities.
+     * @param priority     The priority of the map-reduce computation.
+     * @param <I>          Type of the elements in the input collection.
+     * @param <O>          Type of the reduced result.
+     * @param <P>          Type of the enum that represents all available priorities.
      * @return An object that represents asynchronous result of the map-reduce algorithm.
      */
     protected final <I, O, P extends Enum<P> & IntSupplier> AsyncResult<O> mapReduce(final Iterator<? extends I> collection,
-                                                    final BiFunction<? super I, ? super O, ? extends O> mr,
-                                                    final O initialValue,
-                                                    final P priority) {
-        return AsyncUtils.mapReduce(scheduler, collection, mr,
-                enqueue(() -> initialValue, priority));
+                                                                                     final BiFunction<? super I, ? super O, ? extends O> mr,
+                                                                                     final O initialValue,
+                                                                                     final P priority) {
+        return AsyncUtils.mapReduce(scheduler, collection, mr, prioritizeScalar(initialValue, priority));
     }
 
     /**
      * Iterates over collection and performs filtering and summary operation.
-     * @param collection The collection to process. Cannot be {@literal null}.
-     * @param mr An object that implements map/reduce logic. Cannot be {@literal null}.
+     *
+     * @param collection   The collection to process. Cannot be {@literal null}.
+     * @param mr           An object that implements map/reduce logic. Cannot be {@literal null}.
      * @param initialValue The initial value passed to the map-reduce algorithm at first iteration. Cannot be {@literal null}.
-     * @param <I> Type of the elements in the input collection.
-     * @param <O> Type of the reduced result.
+     * @param <I>          Type of the elements in the input collection.
+     * @param <O>          Type of the reduced result.
      * @return An object that represents asynchronous result of the map-reduce algorithm.
      */
     protected final <I, O> AsyncResult<O> mapReduceAsync(final Iterator<? extends I> collection,
@@ -321,14 +336,15 @@ public abstract class ActiveObject {
     /**
      * Iterates over collection and performs filtering and summary operation.
      * <p>
-     *     Call {@link #mapReduceAsync(java.util.Iterator, java.util.function.BiFunction, Object, Enum)} instead of this method
-     *     if this active object use priority-based task scheduler.
+     * Call {@link #mapReduceAsync(java.util.Iterator, java.util.function.BiFunction, Object, Enum)} instead of this method
+     * if this active object use priority-based task scheduler.
      * </p>
-     * @param collection The collection to process. Cannot be {@literal null}.
-     * @param mr An object that implements map/reduce logic. Cannot be {@literal null}.
+     *
+     * @param collection   The collection to process. Cannot be {@literal null}.
+     * @param mr           An object that implements map/reduce logic. Cannot be {@literal null}.
      * @param initialValue The initial value passed to the map-reduce algorithm at first iteration.
-     * @param <I> Type of the elements in the input collection.
-     * @param <O> Type of the reduced result.
+     * @param <I>          Type of the elements in the input collection.
+     * @param <O>          Type of the reduced result.
      * @return An object that represents asynchronous result of the map-reduce algorithm.
      */
     protected final <I, O> AsyncResult<O> mapReduceAsync(final Iterator<? extends I> collection,
@@ -340,32 +356,33 @@ public abstract class ActiveObject {
     /**
      * Iterates over collection and performs filtering and summary operation.
      * <p>
-     *     Call {@link #mapReduceAsync(java.util.Iterator, java.util.function.BiFunction, Object)} instead of this method
-     *     if this active object don't use priority-based task scheduler.
+     * Call {@link #mapReduceAsync(java.util.Iterator, java.util.function.BiFunction, Object)} instead of this method
+     * if this active object don't use priority-based task scheduler.
      * </p>
-     * @param collection The collection to process. Cannot be {@literal null}.
-     * @param mr An object that implements map/reduce logic. Cannot be {@literal null}.
+     *
+     * @param collection   The collection to process. Cannot be {@literal null}.
+     * @param mr           An object that implements map/reduce logic. Cannot be {@literal null}.
      * @param initialValue The initial value passed to the map-reduce algorithm at first iteration.
-     * @param priority The priority of the map-reduce operation.
-     * @param <I> Type of the elements in the input collection.
-     * @param <O> Type of the reduced result.
-     * @param <P> Type of the enum that represents all available priorities.
+     * @param priority     The priority of the map-reduce operation.
+     * @param <I>          Type of the elements in the input collection.
+     * @param <O>          Type of the reduced result.
+     * @param <P>          Type of the enum that represents all available priorities.
      * @return An object that represents asynchronous result of the map-reduce algorithm.
      */
     protected final <I, O, P extends Enum<P> & IntSupplier> AsyncResult<O> mapReduceAsync(final Iterator<? extends I> collection,
-                                                         final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
-                                                         final O initialValue,
-                                                         final P priority) {
-        return AsyncUtils.mapReduceAsync(scheduler, collection, mr,
-                enqueue(() -> initialValue, priority));
+                                                                                          final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
+                                                                                          final O initialValue,
+                                                                                          final P priority) {
+        return AsyncUtils.mapReduceAsync(scheduler, collection, mr, prioritizeScalar(initialValue, priority));
     }
 
     /**
      * Reduces the specified collection.
-     * @param values An iterator over collection to reduce. Cannot be {@literal null}.
+     *
+     * @param values      An iterator over collection to reduce. Cannot be {@literal null}.
      * @param accumulator Associative, non-interfering and stateless function for combining two values. Cannot be {@literal null}.
-     * @param <I> Type of the elements in the input collection.
-     * @param <O> Type of the reduction result.
+     * @param <I>         Type of the elements in the input collection.
+     * @param <O>         Type of the reduction result.
      * @return The result of the reduction.
      */
     protected final <I, O> AsyncResult<O> reduce(final Iterator<AsyncResult<I>> values,
@@ -375,29 +392,31 @@ public abstract class ActiveObject {
 
     /**
      * Reduces the specified collection.
-     * @param values An iterator over collection to reduce. Cannot be {@literal null}.
+     *
+     * @param values      An iterator over collection to reduce. Cannot be {@literal null}.
      * @param accumulator Associative, non-interfering and stateless function for combining two values. Cannot be {@literal null}.
-     * @param priority Priority of the reduction task.
-     * @param <I> Type of the elements in the input collection.
-     * @param <O> Type of the reduction result.
-     * @param <P> Type of the enum that represents all available priorities.
+     * @param priority    Priority of the reduction task.
+     * @param <I>         Type of the elements in the input collection.
+     * @param <O>         Type of the reduction result.
+     * @param <P>         Type of the enum that represents all available priorities.
      * @return The result of the reduction.
      */
     protected final <I, O, P extends Enum<P> & IntSupplier> AsyncResult<O> reduce(final Iterator<AsyncResult<I>> values,
-                                                 final ThrowableFunction<? super Collection<I>, O> accumulator,
-                                                 final P priority){
+                                                                                  final ThrowableFunction<? super Collection<I>, O> accumulator,
+                                                                                  final P priority) {
         return AsyncUtils.reduce(scheduler,
                 values,
                 accumulator,
-                AsyncUtils.prioritize(AsyncUtils.<I>getInitialVectorProvider(values), priority));
+                AsyncUtils.<Collection<I>, P>prioritize(Vector::new, priority));
     }
 
     /**
      * Reduces the specified collection.
-     * @param values An iterator over collection to reduce. Cannot be {@literal null}.
+     *
+     * @param values      An iterator over collection to reduce. Cannot be {@literal null}.
      * @param accumulator Associative, non-interfering and stateless function for combining two values. Cannot be {@literal null}.
-     * @param <I> Type of the elements in the input collection.
-     * @param <O> Type of the reduction result.
+     * @param <I>         Type of the elements in the input collection.
+     * @param <O>         Type of the reduction result.
      * @return The result of the reduction.
      */
     protected final <I, O> AsyncResult<O> reduceAsync(final Iterator<AsyncResult<I>> values,
@@ -407,18 +426,176 @@ public abstract class ActiveObject {
 
     /**
      * Reduces the specified collection.
-     * @param values An iterator over collection to reduce. Cannot be {@literal null}.
+     *
+     * @param values      An iterator over collection to reduce. Cannot be {@literal null}.
      * @param accumulator Associative, non-interfering and stateless function for combining two values. Cannot be {@literal null}.
-     * @param priority Priority of the reduction task.
-     * @param <I> Type of the elements in the input collection.
-     * @param <O> Type of the reduction result.
-     * @param <P> Type of the enum that represents all available priorities.
+     * @param priority    Priority of the reduction task.
+     * @param <I>         Type of the elements in the input collection.
+     * @param <O>         Type of the reduction result.
+     * @param <P>         Type of the enum that represents all available priorities.
      * @return The result of the reduction.
      */
     protected final <I, O, P extends Enum<P> & IntSupplier> AsyncResult<O> reduceAsync(final Iterator<AsyncResult<I>> values,
-                                                      final Function<? super Collection<I>, AsyncResult<O>> accumulator,
-                                                      final P priority) {
+                                                                                       final Function<? super Collection<I>, AsyncResult<O>> accumulator,
+                                                                                       final P priority) {
         return AsyncUtils.reduceAsync(scheduler, values, accumulator,
-                AsyncUtils.prioritize(AsyncUtils.<I>getInitialVectorProvider(values), priority));
+                AsyncUtils.<Collection<I>, P>prioritize(Vector::new, priority));
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop.
+     * <p>
+     * The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * </p>
+     *
+     * @param predicate    Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param <I>          Type of the looping state.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    protected final <I> AsyncResult<I> until(final Predicate<I> predicate,
+                                             final I initialState) {
+        return AsyncUtils.until(scheduler, predicate, initialState);
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop.
+     * <p>
+     * The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * </p>
+     *
+     * @param predicate    Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param <I>          Type of the looping state.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    protected final <I> AsyncResult<I> until(final Predicate<I> predicate,
+                                             final AsyncResult<I> initialState) {
+        return AsyncUtils.until(scheduler, predicate, initialState);
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop.
+     * <p>
+     * The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * </p>
+     *
+     * @param predicate    Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param priority     The priority of the while-do task.
+     * @param <I>          Type of the looping state.
+     * @param <P>          Type of the priority enum.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    protected final <I, P extends Enum<P> & IntSupplier> AsyncResult<I> until(final Predicate<I> predicate,
+                                                                              final I initialState,
+                                                                              final P priority) {
+        return until(predicate, prioritizeScalar(initialState, priority));
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop with separated condition check and transformation procedure.
+     * <p>
+     * The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * </p>
+     *
+     * @param condition    Loop condition checker. If checker returns {@literal false} then loop will breaks. Cannot be {@literal null}.
+     * @param iteration    Loop transformation procedure. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param <I>          Type of the looping state.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    protected final <I> AsyncResult<I> until(final Predicate<? super I> condition,
+                                             final Function<? super I, ? extends I> iteration,
+                                             final AsyncResult<I> initialState) {
+        return AsyncUtils.until(scheduler, condition, iteration, initialState);
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop with separated condition check and transformation procedure.
+     * <p>
+     * The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * </p>
+     *
+     * @param condition    Loop condition checker. If checker returns {@literal false} then loop will breaks. Cannot be {@literal null}.
+     * @param iteration    Loop transformation procedure. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param <I>          Type of the looping state.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    protected final <I> AsyncResult<I> until(final Predicate<? super I> condition,
+                                             final Function<? super I, ? extends I> iteration,
+                                             final I initialState) {
+        return AsyncUtils.until(scheduler, condition, iteration, initialState);
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop with separated condition check and transformation procedure.
+     * <p>
+     * The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * </p>
+     *
+     * @param condition    Loop condition checker. If checker returns {@literal false} then loop will breaks. Cannot be {@literal null}.
+     * @param iteration    Loop transformation procedure. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param priority     The priority of the while-do task.
+     * @param <I>          Type of the looping state.
+     * @param <P>          Type of tje priority enumeration.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    protected final <I, P extends Enum<P> & IntSupplier> AsyncResult<I> until(final Predicate<? super I> condition,
+                                                                              final Function<? super I, ? extends I> iteration,
+                                                                              final I initialState,
+                                                                              final P priority) {
+        return until(condition, iteration, prioritizeScalar(initialState, priority));
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop.
+     * <p>
+     *     The loop iterations are sequential in time but not blocks the task scheduler thread.
+     *     This version of while-do loop supports iteration with asynchronous result.
+     * </p>
+     * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param <I> Type of the looping state.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    protected final <I> AsyncResult<I> untilAsync(final Function<I, AsyncResult<Boolean>> predicate,
+                                                final AsyncResult<I> initialState) {
+        return AsyncUtils.untilAsync(scheduler, predicate, initialState);
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop.
+     * <p>
+     *     The loop iterations are sequential in time but not blocks the task scheduler thread.
+     *     This version of while-do loop supports iteration with asynchronous result.
+     * </p>
+     * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param <I> Type of the looping state.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    protected final <I> AsyncResult<I> untilAsync(final Function<I, AsyncResult<Boolean>> predicate,
+                                                final I initialState) {
+        return AsyncUtils.untilAsync(scheduler, predicate, initialState);
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop.
+     * <p>
+     *     The loop iterations are sequential in time but not blocks the task scheduler thread.
+     *     This version of while-do loop supports iteration with asynchronous result.
+     * </p>
+     * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param <I> Type of the looping state.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    protected final <I, P extends Enum<P> & IntSupplier> AsyncResult<I> untilAsync(final Function<I, AsyncResult<Boolean>> predicate,
+                                                  final I initialState,
+                                                  final P priority) {
+        return untilAsync(predicate, prioritizeScalar(initialState, priority));
     }
 }

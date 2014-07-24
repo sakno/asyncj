@@ -8,9 +8,7 @@ import java.util.Objects;
 import java.util.Vector;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ThreadFactory;
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.function.IntSupplier;
+import java.util.function.*;
 
 /**
  * Represents additional routines for asynchronous programming.
@@ -73,8 +71,8 @@ public final class AsyncUtils {
     /**
      * Sets the global task scheduler for executing asynchronous computation not associated with any active object.
      * <p>
-     *     The global scheduler may be changed once for entire JVM process.
-     * </p>
+     * The global scheduler may be changed once for entire JVM process.
+     *
      * @param scheduler The global scheduler. Cannot be {@literal null}.
      * @return {@literal true}, if global scheduler is overridden successfully; otherwise, {@literal false}.
      */
@@ -140,7 +138,13 @@ public final class AsyncUtils {
                                                   final Iterator<? extends I> collection,
                                                   final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
                                                   final AsyncResult<O> initialValue) {
-        return initialValue.then((O accumulator) -> collection.hasNext() ? mr.apply(collection.next(), accumulator) : scheduler.successful(accumulator));
+        //(O accumulator) -> collection.hasNext() ? mr.apply(collection.next(), accumulator) : scheduler.successful(accumulator)
+        return initialValue.then(new Function<O, AsyncResult<O>>() {
+            @Override
+            public AsyncResult<O> apply(final O accumulator) {
+                return collection.hasNext() ? mr.apply(collection.next(), accumulator).then(this) : scheduler.successful(accumulator);
+            }
+        });
     }
 
     /**
@@ -197,13 +201,9 @@ public final class AsyncUtils {
                                         final Callable<? extends Collection<I>> initialVector){
         return mapReduceAsync(scheduler,
                 values,
-                (AsyncResult<I> result, Collection<I> collection) -> values.next().then((I elem) -> { collection.add(elem); return collection; }),
+                (AsyncResult<I> result, Collection<I> collection) -> result.then((I elem) -> { collection.add(elem); return collection; }),
                 scheduler.enqueue(initialVector)).
                 then(acc);
-    }
-
-    static <V> Callable<? extends Collection<V>> getInitialVectorProvider(final Iterator<?> values) {
-        return () -> new Vector<>(values instanceof Collection ? ((Collection) values).size() : 10);
     }
 
     /**
@@ -217,11 +217,11 @@ public final class AsyncUtils {
      */
     public static <I, O> AsyncResult<O> reduce(final TaskScheduler scheduler,
                                                final Iterator<AsyncResult<I>> values,
-                                               final ThrowableFunction<? super Collection<I>, O> accumulator){
+                                               final ThrowableFunction<? super Collection<I>, O> accumulator) {
         return reduce(scheduler,
                 values,
                 accumulator,
-                AsyncUtils.<I>getInitialVectorProvider(values));
+                Vector::new);
     }
 
     static <I, O> AsyncResult<O> reduceAsync(final TaskScheduler scheduler,
@@ -251,7 +251,136 @@ public final class AsyncUtils {
                                                final Iterator<AsyncResult<I>> values,
                                                final Function<? super Collection<I>, AsyncResult<O>> accumulator) {
         return reduceAsync(scheduler, values, accumulator,
-                AsyncUtils.<I>getInitialVectorProvider(values));
+                Vector::new);
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop.
+     * <p>
+     *     The loop iterations are sequential in time but not blocks the task scheduler thread.
+     *     This version of while-do loop supports iteration with asynchronous result.
+     * </p>
+     * @param scheduler The scheduler used to enqueue loop iterations. Cannot be {@literal null}.
+     * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param <I> Type of the looping state.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    public static <I> AsyncResult<I> untilAsync(final TaskScheduler scheduler,
+                                                final Function<? super I, AsyncResult<Boolean>> predicate,
+                                                final AsyncResult<I> initialState) {
+        return initialState.then(new Function<I, AsyncResult<I>>() {
+            @Override
+            public AsyncResult<I> apply(final I current) {
+                return predicate.apply(current).then((Boolean success) -> {
+                    final AsyncResult<I> next = scheduler.successful(current);
+                    return success ? next.then(this) : next;
+                });
+            }
+        });
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop.
+     * <p>
+     *     The loop iterations are sequential in time but not blocks the task scheduler thread.
+     *     This version of while-do loop supports iteration with asynchronous result.
+     * </p>
+     * @param scheduler The scheduler used to enqueue loop iterations. Cannot be {@literal null}.
+     * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param <I> Type of the looping state.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    public static <I> AsyncResult<I> untilAsync(final TaskScheduler scheduler,
+                                                final Function<? super I, AsyncResult<Boolean>> predicate,
+                                                final I initialState) {
+        return untilAsync(scheduler, predicate, scheduler.successful(initialState));
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop with separated condition check and transformation procedure.
+     * <p>
+     * The loop iterations are sequential in time but not blocks the task scheduler thread.
+     *
+     * @param scheduler The scheduler used to enqueue loop iterations. Cannot be {@literal null}.
+     * @param condition Loop condition checker. If checker returns {@literal false} then loop will breaks. Cannot be {@literal null}.
+     * @param iteration Loop transformation procedure. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param <I> Type of the looping state.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    public static <I> AsyncResult<I> until(final TaskScheduler scheduler,
+                                           final Predicate<? super I> condition,
+                                           final Function<? super I, ? extends I> iteration,
+                                           final AsyncResult<I> initialState) {
+        return initialState.then(new Function<I, AsyncResult<I>>() {
+            @Override
+            public AsyncResult<I> apply(final I current) {
+                return condition.test(current) ?
+                        scheduler.successful(iteration.apply(current)).then(this) :
+                        scheduler.successful(current);
+            }
+        });
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop with separated condition check and transformation procedure.
+     * <p>
+     *     The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * </p>
+     * @param scheduler The scheduler used to enqueue loop iterations. Cannot be {@literal null}.
+     * @param condition Loop condition checker. If checker returns {@literal false} then loop will breaks. Cannot be {@literal null}.
+     * @param iteration Loop transformation procedure. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param <I> Type of the looping state.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    public static <I> AsyncResult<I> until(final TaskScheduler scheduler,
+                                           final Predicate<? super I> condition,
+                                           final Function<? super I, ? extends I> iteration,
+                                           final I initialState) {
+        return until(scheduler, condition, iteration, scheduler.successful(initialState));
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop.
+     * <p>
+     *     The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * </p>
+     * @param scheduler The scheduler used to enqueue loop iterations. Cannot be {@literal null}.
+     * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param <I> Type of the looping state.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    public static <I> AsyncResult<I> until(final TaskScheduler scheduler,
+                                           final Predicate<? super I> predicate,
+                                           final AsyncResult<I> initialState) {
+        return initialState.then(new Function<I, AsyncResult<I>>() {
+            @Override
+            public AsyncResult<I> apply(final I current) {
+                final AsyncResult<I> next = scheduler.successful(current);
+                return predicate.test(current) ? next.then(this) : next;
+            }
+        });
+    }
+
+    /**
+     * Executes asynchronous version of while-do loop.
+     * <p>
+     *     The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * </p>
+     * @param scheduler The scheduler used to enqueue loop iterations. Cannot be {@literal null}.
+     * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param <I> Type of the looping state.
+     * @return The object that represents asynchronous state of the asynchronous looping.
+     */
+    public static <I> AsyncResult<I> until(final TaskScheduler scheduler,
+                            final Predicate<I> predicate,
+                            final I initialState){
+        return until(scheduler, predicate, scheduler.successful(initialState));
     }
 
     /**

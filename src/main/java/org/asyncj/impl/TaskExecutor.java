@@ -14,7 +14,7 @@ import java.util.concurrent.*;
  */
 public final class TaskExecutor extends AbstractTaskScheduler {
     private final ExecutorService executor;
-    private final ConcurrentHashMap<AsyncResult<?>, Future<?>> activeTasks;
+    private final ConcurrentHashMap<Integer, Future<?>> activeTasks;
 
     public TaskExecutor(final ExecutorService executor){
         this.executor = Objects.requireNonNull(executor, "executor is null.");
@@ -102,13 +102,17 @@ public final class TaskExecutor extends AbstractTaskScheduler {
         return executor.awaitTermination(timeout, unit);
     }
 
+    private static Integer getID(final AsyncResult<?> ar){
+        return ar.hashCode();
+    }
+
     @Override
     protected  <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task) {
-        activeTasks.put(task, executor.submit(() -> {
+        activeTasks.put(getID(task), executor.submit(() -> {
             try {
                 task.run();
             } finally {
-                activeTasks.remove(task);
+                activeTasks.remove(getID(task));
             }
         }));
         return task;
@@ -126,7 +130,7 @@ public final class TaskExecutor extends AbstractTaskScheduler {
     @Override
     public boolean interrupt(final AsyncResult<?> ar) {
         if (ar == null) return false;
-        final Future<?> f = activeTasks.remove(ar);
+        final Future<?> f = activeTasks.remove(getID(ar));
         return f != null && f.cancel(true);
     }
 

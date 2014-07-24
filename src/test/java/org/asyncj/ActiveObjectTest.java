@@ -5,20 +5,11 @@ import org.asyncj.impl.TaskExecutor;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.time.Duration;
+import java.util.Arrays;
 import java.util.concurrent.*;
 
 public final class ActiveObjectTest extends Assert {
-
-    @Test
-    public void stressTest() throws InterruptedException {
-        final TaskExecutor executor = TaskExecutor.newSingleThreadExecutor();
-        final ArrayOperations obj = new ArrayOperations(executor);
-        for(int i = 0; i < 1000; i++)
-            obj.reverseArray(new Integer[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10});
-        while (executor.getActiveTasks() > 0)
-            Thread.sleep(100);
-        assertEquals(0, executor.getActiveTasks());
-    }
 
     @Test
     public void singleAsyncCallTest() throws ExecutionException, InterruptedException {
@@ -30,9 +21,8 @@ public final class ActiveObjectTest extends Assert {
     }
 
     @Test
-    public void continuationTest() throws ExecutionException, InterruptedException{
-        final TaskExecutor executor = TaskExecutor.newSingleThreadExecutor();
-        final ArrayOperations obj = new ArrayOperations(executor);
+    public void continuationTest() throws ExecutionException, InterruptedException, TimeoutException{
+        final ArrayOperations obj = new ArrayOperations();
         final AsyncResult<Boolean[]> even = obj.reverseArray(new Integer[]{1, 2, 3}).then((Integer[] array)->{
             for(int i = 0; i < array.length; i++)
                 array[i] = array[i] + 2;
@@ -43,12 +33,24 @@ public final class ActiveObjectTest extends Assert {
                 result[i] = array[i] % 2 == 0;
             return result;
         });
-        final Boolean[] result = even.get();
+        final Boolean[] result = even.get(Duration.ofSeconds(3));
         assertEquals(3, result.length);
         assertFalse(result[0]);
         assertTrue(result[1]);
         assertFalse(result[0]);
-        assertEquals(0, executor.getActiveTasks());
+    }
+
+    @Test
+    public void asyncContinuationTest() throws ExecutionException, InterruptedException, TimeoutException {
+        final ArrayOperations obj = new ArrayOperations();
+        final AsyncResult<Integer[]> array = AsyncUtils.getGlobalScheduler()
+                .enqueue(() -> new Integer[5])
+                .then((Integer[] a) -> {
+                    for (int i = 0; i < a.length; i++) a[i] = i;
+                    return AsyncUtils.getGlobalScheduler().successful(a);
+                });
+        final Integer[] result = array.get(Duration.ofSeconds(3));
+        assertArrayEquals(new Integer[]{0, 1, 2, 3, 4}, result);
     }
 
     @Test
@@ -96,7 +98,7 @@ public final class ActiveObjectTest extends Assert {
     }
 
     @Test
-    public void exceptionChainableHandlingTest() throws InterruptedException, ExecutionException, TimeoutException {
+    public void exceptionChainHandlingTest() throws InterruptedException, ExecutionException, TimeoutException {
         final ArrayOperations obj = new ArrayOperations();
         final Integer[] arr = null;
         final String errorMsg = obj.reverseArray(arr)
@@ -124,7 +126,7 @@ public final class ActiveObjectTest extends Assert {
         Task.enableAdvancedStringRepresentation();
         final TaskExecutor executor = TaskExecutor.newSingleThreadExecutor();
         final ArrayOperations obj = new ArrayOperations(executor);
-        AsyncResult<Integer[]> ar = obj.reverseArray(new Integer[]{1, 2, 3, 4, 5, 6, 7, 8, 9});
+        AsyncResult<Integer[]> ar = obj.reverseArray(new Integer[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13});
         for (int i = 0; i < 1000; i++) {
             ar = ar.then((Integer[] array) -> {
                 for (int j = 0; j < array.length; j++)
@@ -134,15 +136,84 @@ public final class ActiveObjectTest extends Assert {
         }
         final Integer[] result = ar.get(4, TimeUnit.SECONDS);
         assertNotNull(result);
-        assertEquals(9, result.length);
+        assertEquals(13, result.length);
     }
 
     @Test
-    public void performanceTest() throws InterruptedException, ExecutionException, TimeoutException {
-        for(int i = 0; i < 10; i++) {
+    public void stressTest() throws InterruptedException, ExecutionException, TimeoutException {
+        for(int i = 0; i < 30; i++) {
             final long currentNanos = System.nanoTime();
             longChainTest();
             System.out.println(System.nanoTime() - currentNanos);
         }
+    }
+
+    @Test
+    public void simpleReduceTest() throws InterruptedException, ExecutionException, TimeoutException {
+        final AsyncResult<Integer> ar1 = AsyncUtils.getGlobalScheduler().enqueue(() -> {
+            Thread.sleep(100);
+            return 10;
+        });
+        final AsyncResult<Byte> ar2 = AsyncUtils.getGlobalScheduler().enqueue(() -> {
+            Thread.sleep(50);
+            return (byte) 42;
+        });
+        final AsyncResult<Integer> result = AsyncUtils.reduce(ar1, ar2, (value1, value2) -> value2 - value1);
+        assertEquals(32, (int) result.get(3, TimeUnit.SECONDS));
+    }
+
+    @Test
+    public void mapReduceTest() throws InterruptedException, ExecutionException, TimeoutException{
+        final Integer[] array = new Integer[]{1, 2, 3, 4, 5, 6 ,7 ,8 , 9, 10};
+        final AsyncResult<String> result = AsyncUtils.mapReduce(AsyncUtils.getGlobalScheduler(),
+                Arrays.asList(array).iterator(),
+                (input, output)->output + input,
+                "");
+        assertEquals("12345678910", result.get(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    public void asyncMapReduceTest() throws InterruptedException, ExecutionException, TimeoutException{
+        final Integer[] array = new Integer[]{1, 2, 3, 4, 5, 6 ,7 ,8 , 9, 10};
+        final AsyncResult<String> result = AsyncUtils.mapReduceAsync(AsyncUtils.getGlobalScheduler(),
+                Arrays.asList(array).iterator(),
+                (input, output) -> AsyncUtils.getGlobalScheduler().successful(output + input),
+                "");
+        assertEquals("12345678910", result.get(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    public void reduceMany() throws InterruptedException, ExecutionException, TimeoutException{
+        final AsyncResult<String> ar1 = AsyncUtils.getGlobalScheduler().enqueue(() -> {
+            Thread.sleep(100);
+            return "Hello";
+        });
+        final AsyncResult<String> ar2 = AsyncUtils.getGlobalScheduler().enqueue(() -> {
+            Thread.sleep(50);
+            return ",";
+        });
+        final AsyncResult<String> ar3 = AsyncUtils.getGlobalScheduler().enqueue(() -> {
+            Thread.sleep(100);
+            return " ";
+        });
+        final AsyncResult<String> ar4 = AsyncUtils.getGlobalScheduler().enqueue(() -> {
+            Thread.sleep(50);
+            return "world!";
+        });
+        final AsyncResult<String> reduceResult = AsyncUtils.<String, String>reduce(AsyncUtils.getGlobalScheduler(), Arrays.asList(ar1, ar2, ar3, ar4).iterator(),  parts->{
+            final StringBuilder result = new StringBuilder();
+            parts.stream().forEach(p->result.append(p));
+            return result.toString();
+        });
+        assertEquals("Hello, world!", reduceResult.get(Duration.ofSeconds(3)));
+    }
+
+    @Test
+    public void untilTest() throws InterruptedException, ExecutionException, TimeoutException {
+        final AsyncResult<Integer> result = AsyncUtils.until(AsyncUtils.getGlobalScheduler(),
+                i -> i < 1000,  //condition
+                i -> i * 2,     //loop body
+                1);
+        assertEquals(1024, (int) result.get(Duration.ofSeconds(4)));
     }
 }
