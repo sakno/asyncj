@@ -1,6 +1,8 @@
 package org.asyncj;
 
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.RunnableFuture;
 import java.util.function.Function;
 
@@ -10,7 +12,7 @@ import java.util.function.Function;
  * @version 1.0
  * @since 1.0
  */
-public interface TaskScheduler {
+public interface TaskScheduler extends ExecutorService {
 
     /**
      * Interrupts thread associated with the specified asynchronous computation.
@@ -22,42 +24,23 @@ public interface TaskScheduler {
      */
     boolean interrupt(final AsyncResult<?> ar);
 
-    /**
-     * Schedules a new task.
-     * @param task The computation to execute asynchronously.
-     * @param <O> Type of the asynchronous computation result.
-     * @return An object that represents state of the asynchronous computation.
-     */
-    <O> AsyncResult<O> enqueue(final Callable<? extends O> task);
+    @Override
+    <T> AsyncResult<T> submit(final Callable<T> task);
 
-    <O, T extends AsyncResult<O> & RunnableFuture<O>> AsyncResult<O> enqueueDirect(final Function<TaskScheduler, T> taskFactory);
-
-    /**
-     * Wraps the specified value into completed asynchronous result.
-     * @param value
-     * @param <O>
-     * @return
-     */
-    default <O> AsyncResult<O> successful(final O value) {
-        return enqueue(() -> value);
-    }
-
-    /**
-     * Wraps the specified exception into completed asynchronous result.
-     * @param err
-     * @param <O>
-     * @return
-     */
-    default <O> AsyncResult<O> failure(final Exception err){
-        return enqueue(()->{
-            throw err;
+    @Override
+    default <T> AsyncResult<T> submit(final Runnable task, final T result) {
+        return submit(() -> {
+            task.run();
+            return result;
         });
     }
 
-    /**
-     * Determines whether the specified asynchronous computation scheduled by this object.
-     * @param ar The asynchronous computation to check.
-     * @return {@literal true}, if the specified asynchronous computation is scheduled by this object; otherwise, {@literal false}.
-     */
+    @Override
+    default AsyncResult<Void> submit(final Runnable task) {
+        return submit(task, null);
+    }
+
+    <O, T extends AsyncResult<O> & RunnableFuture<O>> AsyncResult<O> submitDirect(final Function<TaskScheduler, T> taskFactory);
+
     boolean isScheduled(final AsyncResult<?> ar);
 }

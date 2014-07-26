@@ -234,7 +234,7 @@ abstract class ProxyTask<I, O> extends SynchronizedStateMachine implements Async
         return readOnTransition(ANY_STATE, (int currentState) -> {
             switch (currentState) {
                 case PENDING:
-                    return scheduler.enqueueDirect((TaskScheduler scheduler) -> new ProxyTask<O, O1>(scheduler, this) {
+                    return scheduler.submitDirect((TaskScheduler scheduler) -> new ProxyTask<O, O1>(scheduler, this) {
                         @Override
                         protected void run(final O result, final Exception err) {
                             if (err != null)
@@ -260,7 +260,7 @@ abstract class ProxyTask<I, O> extends SynchronizedStateMachine implements Async
         return readOnTransition(ANY_STATE, (int currentState) -> {
             switch (currentState) {
                 case PENDING:
-                    return scheduler.enqueueDirect((TaskScheduler scheduler) -> new ProxyTask<O, O1>(scheduler, this) {
+                    return scheduler.submitDirect((TaskScheduler scheduler) -> new ProxyTask<O, O1>(scheduler, this) {
                         @Override
                         protected void run(final O result, final Exception err) {
                             if (err != null) super.failure(err);
@@ -350,7 +350,7 @@ abstract class ProxyTask<I, O> extends SynchronizedStateMachine implements Async
         readOnTransition(ANY_STATE, (int currentState) -> {
             switch (currentState) {
                 case PENDING:
-                    scheduler.enqueueDirect(createCallbackTaskFactory(this, callback));
+                    scheduler.submitDirect(createCallbackTaskFactory(this, callback));
                     return;
                 case WRAPPED:
                     underlyingTask.onCompleted(callback);

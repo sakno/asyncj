@@ -4,6 +4,10 @@ import org.asyncj.*;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
+import java.util.concurrent.locks.AbstractQueuedSynchronizer;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -18,47 +22,49 @@ import java.util.function.Function;
  * @version 1.0
  * @since 1.0
  */
-public abstract class Task<V> extends SynchronizedStateMachine implements AsyncResult<V>, RunnableFuture<V>, Callable<V> {
+public abstract class Task<V> extends AbstractQueuedSynchronizer implements AsyncResult<V>, RunnableFuture<V>, Callable<V> {
     private static boolean useAdvancedStringRepresentation = false;
 
-    private static final int CREATED_STATE = 1;
-    private static final int EXECUTED_STATE = 2;
-    private static final int COMPLETED_STATE = 4;//this is a complex state that covers COMPLETED, CANCELLED and FAILED
-    private static final int ANY_STATE = CREATED_STATE | EXECUTED_STATE | COMPLETED_STATE;
+    private static final int CREATED_STATE = 1;  //initial state
+    private static final int EXECUTED_STATE = 2; //temporary state
+    private static final int COMPLETED_STATE = 4; //task is completed (successfully or unsuccessfully)
+    private static final int CANCELLED_STATE = 8; //task is cancelled
+    private static final int FINAL_STATE = COMPLETED_STATE | CANCELLED_STATE;
 
-    private volatile Exception error;
-    private volatile V result;
+    private Exception error;
+    private V result;
     private final TaskScheduler scheduler;
+    //this flag is used to prevent transition between states.
+    // It is used for 'then' request to prevent dead children tasks.
+    private volatile boolean preventTransition;
+
     /*
      * Usually, the task has no more than one children task.
      * Therefore, it is reasonable not use LinkedList for storing a collection of task children.
      * Instead of LinkedList the task represents linked list Node itself.
      * Of course, more that 2-3 children tasks will not be processed effectively.
      */
-    private volatile Task nextTask;
+    private final AtomicReference<Task> nextTask;
 
     /**
      * Initializes a new task prepared for execution in the specified scheduler.
      * @param scheduler The scheduler that owns by the newly created task. Cannot be {@literal null}.
      */
     protected Task(final TaskScheduler scheduler){
-        super(CREATED_STATE);
+        setState(CREATED_STATE);
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler is null.");
         result = null;
-        error = null;
-        //setState(CREATED_STATE);
-        nextTask = null;
+        nextTask = new AtomicReference<>(null);
+        preventTransition = false;
     }
 
-    private void appendChildTask(final Task childTask){
-        if(nextTask == null) nextTask = childTask;
-        else nextTask.appendChildTask(childTask);
+    @SuppressWarnings("unchecked")
+    private <O> Task<O> appendChildTask(final Task<O> childTask) {
+        return nextTask.updateAndGet(nextTask -> nextTask == null ? childTask : nextTask.appendChildTask(childTask));
     }
 
-    private <O> Task<O> createAndAppendChildTask(final Callable<? extends O> task){
-        final Task<O> childTask = newChildTask(scheduler, task);
-        appendChildTask(childTask);
-        return childTask;
+    private <O> Task<O> createAndAppendChildTask(final Callable<? extends O> task) {
+        return appendChildTask(newChildTask(scheduler, task));
     }
 
     /**
@@ -80,24 +86,15 @@ public abstract class Task<V> extends SynchronizedStateMachine implements AsyncR
         return ((long)scheduler.hashCode() << 32) | ((long)hashCode() & 0xFFFFFFFL);
     }
 
-    private static boolean isCancellationException(final Exception error){
-        return error instanceof InterruptedException || error instanceof CancellationException;
+    @Override
+    protected final int tryAcquireShared(final int ignore) {
+        return (getState() & FINAL_STATE) != 0 ? 1 : -1;
     }
 
-    private static AsyncResultState getAsyncState(final int state, final Exception error){
-        switch (state){
-            case CREATED_STATE: return AsyncResultState.CREATED;
-            case EXECUTED_STATE: return AsyncResultState.EXECUTED;
-            case COMPLETED_STATE:
-                if(error == null) return AsyncResultState.COMPLETED;
-                else if(isCancellationException(error))
-                    return AsyncResultState.CANCELLED;
-                else return AsyncResultState.FAILED;
-                //never happens
-            default: return null;
-        }
+    @Override
+    protected final boolean tryReleaseShared(final int ignore) {
+        return true;
     }
-
 
     /**
      * Gets state of this task.
@@ -105,7 +102,15 @@ public abstract class Task<V> extends SynchronizedStateMachine implements AsyncR
      */
     @Override
     public final AsyncResultState getAsyncState(){
-        return getAsyncState(getState(), error);
+        final int currentState = getState();
+        switch (currentState){
+            case CREATED_STATE: return AsyncResultState.CREATED;
+            case COMPLETED_STATE: return error != null ? AsyncResultState.FAILED : AsyncResultState.COMPLETED;
+            case CANCELLED_STATE: return AsyncResultState.CANCELLED;
+            case EXECUTED_STATE: return AsyncResultState.EXECUTED;
+            //never happens
+            default: throw new IllegalStateException(String.format("Invalid task state: %s", currentState));
+        }
     }
 
     /**
@@ -140,21 +145,22 @@ public abstract class Task<V> extends SynchronizedStateMachine implements AsyncR
      */
     @Override
     public final boolean cancel(final boolean mayInterruptIfRunning) {
-        return writeOnTransition(ANY_STATE, COMPLETED_STATE, (int currentState) -> {
-            switch (currentState) {
-                case CREATED_STATE:
-                    error = new CancellationException(String.format("%s is cancelled.", this));
-                    if (nextTask != null) nextTask.cancel(mayInterruptIfRunning);
-                    nextTask = null; //help GC
-                    return true;
-                case EXECUTED_STATE:
-                    return scheduler.interrupt(this);
+        int currentState;
+        do {
+            switch (currentState = getState()) {
                 case COMPLETED_STATE:
-                    return isCancellationException(error);
-                default:
                     return false;
+                case CANCELLED_STATE:
+                    return true;
             }
-        });
+        }
+        while (preventTransition || !compareAndSetState(currentState, CANCELLED_STATE));
+        try {
+            return !mayInterruptIfRunning || scheduler.interrupt(this);
+        } finally {
+            releaseShared(0);
+            done(CANCELLED_STATE);
+        }
     }
 
     /**
@@ -168,14 +174,15 @@ public abstract class Task<V> extends SynchronizedStateMachine implements AsyncR
      */
     @Override
     public final boolean isDone() {
-        return getState() == COMPLETED_STATE;
+        return (getState() & FINAL_STATE) != 0;
     }
 
-    private static <V> V prepareTaskResult(final V result, final Exception error) throws CancellationException, ExecutionException{
-        if(error == null) return result;
-        else if(error instanceof CancellationException) throw (CancellationException)error;
-        else if(error instanceof InterruptedException) throw new CancellationException(error.getMessage());
-        else throw new ExecutionException(error);
+    private static <V> V prepareResult(final int currentState, final V result, final Exception error) throws ExecutionException {
+        if (currentState == CANCELLED_STATE)
+            throw new CancellationException();
+        else if (error != null)
+            throw new ExecutionException(error);
+        else return result;
     }
 
     /**
@@ -191,12 +198,8 @@ public abstract class Task<V> extends SynchronizedStateMachine implements AsyncR
      */
     @Override
     public final V get() throws InterruptedException, ExecutionException {
-        acquireSharedInterruptibly(COMPLETED_STATE);
-        try {
-            return prepareTaskResult(result, error);
-        } finally {
-            releaseShared(COMPLETED_STATE);
-        }
+        acquireSharedInterruptibly(0);
+        return prepareResult(getState(), result, error);
     }
 
     /**
@@ -216,13 +219,9 @@ public abstract class Task<V> extends SynchronizedStateMachine implements AsyncR
     @SuppressWarnings("NullableProblems")
     @Override
     public final V get(final long timeout, final TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
-        tryAcquireSharedNanos(COMPLETED_STATE, unit.toNanos(timeout));
-        try{
-            return prepareTaskResult(result, error);
-        }
-        finally {
-            releaseShared(COMPLETED_STATE);
-        }
+        if (!tryAcquireSharedNanos(0, unit.toNanos(timeout)))
+            throw new TimeoutException();
+        else return prepareResult(getState(), result, error);
     }
 
     /**
@@ -233,7 +232,7 @@ public abstract class Task<V> extends SynchronizedStateMachine implements AsyncR
      */
     @Override
     public final boolean isCancelled() {
-        return isDone() && isCancellationException(error);
+        return getState() == CANCELLED_STATE;
     }
 
     /**
@@ -245,35 +244,43 @@ public abstract class Task<V> extends SynchronizedStateMachine implements AsyncR
      */
     @Override
     public final void run() {
-        switch (acquireAndGetState(ANY_STATE)) {
-            case CREATED_STATE:
-                try {
-                    result = call();
-                } catch (final Exception e) {
-                    error = e;
-                } finally {
-                    release(COMPLETED_STATE);
-                }
-                if (nextTask != null)
-                    if (isCancellationException(error))
-                        nextTask.cancel(false);
-                    else scheduler.enqueue(nextTask);
-                nextTask = null; //help GC
-                return;
-            default:
-                release(getState());
-        }
+        if (compareAndSetState(CREATED_STATE, EXECUTED_STATE))
+            try {
+                setResult(call(), value -> this.result = value);
+            } catch (final Exception e) {
+                setResult(e, value -> this.error = value);
+            }
     }
 
     /**
-     * Validates state machine transition.
-     * @param from The source state of the task.
-     * @param to The sink state of the task.
-     * @return {@literal true}, if the specified transition is valid; otherwise, {@literal false}.
+     * Invoked when task transits into the final state: COMPLETED, EXCEPTIONAL, CANCELLED
+     * @param finalState The final state of the task.
      */
-    @Override
-    protected final boolean isValidTransition(final int from, final int to) {
-        return to >= from;
+    private void done(final int finalState) {
+        final Task nt = nextTask.getAndUpdate(t -> null); //help GC
+        switch (finalState) {
+            case CANCELLED_STATE:
+                nt.cancel(true);
+                return;
+            case COMPLETED_STATE:
+                scheduler.submit((Runnable) nt);
+        }
+    }
+
+    private <T> void setResult(final T result, final Consumer<T> fieldChanger) {
+        int currentState;
+        do {
+            switch (currentState = getState()) {
+                case CANCELLED_STATE:
+                    releaseShared(0); //handle potential racing with a cancel request
+                case COMPLETED_STATE:
+                    return;
+            }
+        }
+        while (preventTransition || !compareAndSetState(currentState, COMPLETED_STATE));
+        fieldChanger.accept(result);
+        releaseShared(0);
+        done(COMPLETED_STATE);
     }
 
     /**
@@ -293,11 +300,12 @@ public abstract class Task<V> extends SynchronizedStateMachine implements AsyncR
         };
     }
 
-    private <O> AsyncResult<O> then(final Callable<? extends O> task) {
-        return writeOnTransition(ANY_STATE, currentState -> {
-            switch (currentState) {
+    private <O> AsyncResult<O> then(final Callable<O> task) {
+        preventTransition = true;
+        try {
+            switch (getState()) {
                 case COMPLETED_STATE:
-                    return isCancellationException(error) ? scheduler.failure(error) : scheduler.enqueue(task);
+                    return scheduler.submit(task);
                 case EXECUTED_STATE:
                 case CREATED_STATE:
                     return createAndAppendChildTask(task);
@@ -305,7 +313,9 @@ public abstract class Task<V> extends SynchronizedStateMachine implements AsyncR
                 default:
                     throw new IllegalStateException(String.format("Invalid task state %s", getAsyncState()));
             }
-        });
+        } finally {
+            preventTransition = false;
+        }
     }
 
     /**
@@ -364,7 +374,7 @@ public abstract class Task<V> extends SynchronizedStateMachine implements AsyncR
                                    final Function<Exception, AsyncResult<O>> errorHandler) {
         Objects.requireNonNull(action, "action is null.");
         //synchronization via AQS is not required
-        return scheduler.enqueueDirect((TaskScheduler scheduler) -> new ProxyTask<V, O>(scheduler, this) {
+        return scheduler.submitDirect((TaskScheduler scheduler) -> new ProxyTask<V, O>(scheduler, this) {
             @Override
             protected void run(final V result, final Exception err) {
                 if (err != null)
@@ -379,7 +389,7 @@ public abstract class Task<V> extends SynchronizedStateMachine implements AsyncR
     public final <O> AsyncResult<O> then(Function<? super V, AsyncResult<O>> action) {
         Objects.requireNonNull(action, "action is null.");
         //synchronization via AQS is not required
-        return scheduler.enqueueDirect((TaskScheduler scheduler) -> new ProxyTask<V, O>(scheduler, this) {
+        return scheduler.submitDirect((TaskScheduler scheduler) -> new ProxyTask<V, O>(scheduler, this) {
             @Override
             protected void run(final V result, final Exception err) {
                 if (err != null) failure(err);

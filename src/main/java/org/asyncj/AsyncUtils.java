@@ -82,6 +82,24 @@ public final class AsyncUtils {
         return useOverriddenScheduler = true;
     }
 
+    public static <V> AsyncResult<V> successful(final TaskScheduler scheduler, final V value) {
+        return scheduler.submit(() -> value);
+    }
+
+    public static <V> AsyncResult<V> failure(final TaskScheduler scheduler, final Exception error) {
+        final Callable<V> task = () -> {
+            throw error;
+        };
+        return scheduler.submit(task);
+    }
+
+    public static <V> AsyncResult<V> failure(final TaskScheduler scheduler, final Supplier<Exception> errorFactory) {
+        final Callable<V> task = () -> {
+            throw errorFactory.get();
+        };
+        return scheduler.submit(task);
+    }
+
     /**
      * Iterates over collection and performs filtering and summary operation.
      * @param scheduler The scheduler used to enqueue map-reduce operation. Cannot be {@literal null}.

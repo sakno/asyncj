@@ -60,7 +60,7 @@ public abstract class AbstractTaskScheduler implements TaskScheduler {
     protected abstract <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task);
 
     @Override
-    public final  <O, T extends AsyncResult<O> & RunnableFuture<O>> AsyncResult<O> enqueueDirect(final Function<TaskScheduler, T> taskFactory) {
+    public final  <O, T extends AsyncResult<O> & RunnableFuture<O>> AsyncResult<O> submitDirect(final Function<TaskScheduler, T> taskFactory) {
         return enqueueTask(taskFactory.apply(this));
     }
 
