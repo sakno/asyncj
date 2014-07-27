@@ -15,6 +15,7 @@ The second aim is to demonstrate Java 8 features, such as [Lambda Expression](ht
 ## Features
 AsyncJ is very lightweight thing. The implementation consists of 20 classes (approximately) from which 4 classes intended for use from user code.
 Despite the simple implementation, AsyncJ API is very powerful and provides the following features:
+
 * Promise pipelining
 * Bundlized for OSGi
 * Active Object support
@@ -26,6 +27,7 @@ This library requires Java 8 SE or later.
 ## Alternatives
 AsyncJ doesn't provide implementation of actors, agents or messaging subsystem and require Java 8 or later. If AsyncJ doesn't fit your 
 requirements you can choose the following alternatives:
+
 * [async4j](https://github.com/amah/async) - asynchronous programming library that provides a set of callback based constructs
 * [promise4j](https://github.com/tehsenaus/promise4j) - completely type-safe implementation of Promises for Java
 * [Akka](http://akka.io) - building scalable applications using actors and agents
