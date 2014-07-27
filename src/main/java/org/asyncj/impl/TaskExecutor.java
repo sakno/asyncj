@@ -1,9 +1,14 @@
 package org.asyncj.impl;
 
-import org.asyncj.AsyncResult;
+import org.asyncj.TaskScheduler;
 
+import java.lang.ref.Reference;
+import java.lang.ref.WeakReference;
 import java.util.Objects;
-import java.util.concurrent.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Represents simple task scheduler that represents bridge
@@ -13,16 +18,55 @@ import java.util.concurrent.*;
  * @since 1.0
  */
 public final class TaskExecutor extends AbstractTaskScheduler {
-    private final ExecutorService executor;
-    private final ConcurrentHashMap<Integer, Future<?>> activeTasks;
+    private static abstract class ThreadAffinityTask<V> extends Task<V> implements ThreadAffinityAsyncResult<V>{
+        private Reference<Thread> affinity = null;
 
-    public TaskExecutor(final ExecutorService executor){
-        this.executor = Objects.requireNonNull(executor, "executor is null.");
-        this.activeTasks = new ConcurrentHashMap<>(10);
-    }
+        private ThreadAffinityTask(final TaskScheduler scheduler){
+            super(scheduler);
+        }
 
-    public int getActiveTasks(){
-        return activeTasks.size();
+        private static <V> ThreadAffinityTask<V> create(final TaskScheduler scheduler, final Callable<V> task){
+            return new ThreadAffinityTask<V>(scheduler) {
+                @Override
+                public V call() throws Exception {
+                    return task.call();
+                }
+            };
+        }
+
+        /**
+         * Creates a new instance of the child task.
+         *
+         * @param scheduler The scheduler that owns by the newly created task. Cannot be {@literal null}.
+         * @param task      The implementation of the child task. Cannot be {@literal null}.
+         * @return A new instance of the child task.
+         */
+        @Override
+        protected final  <O> Task<O> newChildTask(final TaskScheduler scheduler, final Callable<O> task) {
+            return create(scheduler, task);
+        }
+
+        /**
+         * Gets thread associated with the asynchronous computation.
+         * <p>
+         * This method is not deterministic and may return {@literal null} if
+         * thread that owns by this task is already completed, stopped or destroyed.
+         *
+         * @return The thread associated with the asynchronous computation.
+         */
+        @Override
+        public final Thread getThread() {
+            return affinity != null ? affinity.get() : null;
+        }
+
+        private void setThread(final Thread affinity){
+            this.affinity = new WeakReference<>(affinity);
+        }
+
+        private void clearThread(){
+            if(affinity != null) affinity.clear();
+            affinity = null;
+        }
     }
 
     /**
@@ -37,9 +81,6 @@ public final class TaskExecutor extends AbstractTaskScheduler {
      *        the core, this is the maximum time that excess idle threads
      *        will wait for new tasks before terminating.
      * @param unit the time unit for the {@code keepAliveTime} argument
-     * @param workQueue the queue to use for holding tasks before they are
-     *        executed.  This queue will hold only the {@code Runnable}
-     *        tasks submitted by the {@code execute} method.
      * @param threadFactory the factory to use when the executor
      *        creates a new thread
      * @throws IllegalArgumentException if one of the following holds:<br>
@@ -54,9 +95,8 @@ public final class TaskExecutor extends AbstractTaskScheduler {
                         final int maximumPoolSize,
                         final long keepAliveTime,
                         final TimeUnit unit,
-                        final BlockingQueue<Runnable> workQueue,
-                        final ThreadFactory threadFactory){
-        this(new ThreadPoolExecutor(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory));
+                        final ThreadFactory threadFactory) {
+        super(corePoolSize, maximumPoolSize, keepAliveTime, unit, new LinkedBlockingQueue<>(), threadFactory);
     }
 
     /**
@@ -68,7 +108,7 @@ public final class TaskExecutor extends AbstractTaskScheduler {
      */
     public static TaskExecutor newSingleThreadExecutor(final int threadPriority,
                                                        final ThreadGroup group) {
-        return new TaskExecutor(0, 1, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), r -> {
+        return new TaskExecutor(0, 1, 30, TimeUnit.SECONDS, r -> {
             final Thread result = new Thread(group, r);
             result.setDaemon(true);
             result.setPriority(threadPriority);
@@ -86,69 +126,52 @@ public final class TaskExecutor extends AbstractTaskScheduler {
         return newSingleThreadExecutor(Thread.NORM_PRIORITY, null);
     }
 
-    public boolean isShutdown(){
-        return executor.isShutdown();
-    }
-
-    public boolean isTerminated(){
-        return executor.isTerminated();
-    }
-
-    public void shutdown(){
-        executor.shutdown();
-    }
-
-    public boolean awaitTermination(final long timeout, final TimeUnit unit) throws InterruptedException {
-        return executor.awaitTermination(timeout, unit);
-    }
-
-    private static Integer getID(final AsyncResult<?> ar){
-        return ar.hashCode();
-    }
-
-    @Override
-    protected  <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task) {
-        activeTasks.put(getID(task), executor.submit(() -> {
-            try {
-                task.run();
-            } finally {
-                activeTasks.remove(getID(task));
-            }
-        }));
-        return task;
-    }
-
     /**
-     * Interrupts thread associated with the specified asynchronous computation.
-     * <p>
-     * This is infrastructure method and you should not use it directly from your code.
-     * </p>
+     * Returns a {@link org.asyncj.impl.Task} for the given callable task.
      *
-     * @param ar The asynchronous computation to interrupt.
-     * @return {@literal true}, if the specified asynchronous computation is interrupted; otherwise, {@literal false}.
+     * @param callable the callable task being wrapped
+     * @return a {@code RunnableFuture} which, when run, will call the
+     * underlying callable and which, as a {@code Future}, will yield
+     * the callable's result as its result and provide for
+     * cancellation of the underlying task
      */
     @Override
-    public boolean interrupt(final AsyncResult<?> ar) {
-        if (ar == null) return false;
-        final Future<?> f = activeTasks.remove(getID(ar));
-        return f != null && f.cancel(true);
+    protected <T> ThreadAffinityTask<T> newTaskFor(final Callable<T> callable) {
+        return ThreadAffinityTask.create(this, Objects.requireNonNull(callable, "callable is null."));
     }
 
     /**
-     * Returns a string representation of this executor.
-     * @return A string representation of this executor.
+     * Method invoked prior to executing the given Runnable in the
+     * given thread.  This method is invoked by thread {@code t} that
+     * will execute task {@code r}, and may be used to re-initialize
+     * ThreadLocals, or to perform logging.
+     * <p>
+     * <p>This implementation does nothing, but may be customized in
+     * subclasses. Note: To properly nest multiple overridings, subclasses
+     * should generally invoke {@code super.beforeExecute} at the end of
+     * this method.
+     *
+     * @param t the thread that will run task {@code r}
+     * @param r the task that will be executed
      */
     @Override
-    public String toString() {
-        return executor.toString();
+    protected void beforeExecute(final Thread t, final Runnable r) {
+        if(r instanceof ThreadAffinityTask<?>)
+            ((ThreadAffinityTask<?>)r).setThread(t);
     }
 
     /**
-     * Shutdowns underlying executor service.
+     * Method invoked upon completion of execution of the given Runnable.
+     * This method is invoked by the thread that executed the task. If
+     * non-null, the Throwable is the uncaught {@code RuntimeException}
+     * or {@code Error} that caused execution to terminate abruptly.
+     *
+     * @param r the runnable that has completed
+     * @param t the exception that caused termination, or null if
      */
-    @SuppressWarnings("FinalizeDoesntCallSuperFinalize")
     @Override
-    protected void finalize() {
-        executor.shutdown();
+    protected void afterExecute(final Runnable r, final Throwable t) {
+        if (r instanceof ThreadAffinityTask<?>)
+            ((ThreadAffinityTask<?>) r).clearThread();
     }
 }

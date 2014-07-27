@@ -1,11 +1,15 @@
 package org.asyncj.impl;
 
-import org.asyncj.AsyncResult;
 import org.asyncj.AsyncUtils;
+import org.asyncj.PriorityTaskScheduler;
+import org.asyncj.TaskScheduler;
 
+import java.lang.ref.Reference;
+import java.lang.ref.WeakReference;
 import java.util.EnumSet;
-import java.util.Objects;
-import java.util.concurrent.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.function.IntSupplier;
 
 /**
@@ -21,73 +25,66 @@ import java.util.function.IntSupplier;
  */
 public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
 
-    private static final class PriorityFutureTask<V> extends FutureTask<V> implements Comparable<PriorityFutureTask> {
-        private final int priority;
+    private static abstract class ThreadAffinityPriorityTask<V> extends PriorityTask<V> implements ThreadAffinityAsyncResult<V> {
+        private Reference<Thread> affinity = null;
 
-        public PriorityFutureTask(final Runnable task, final V value, final int priority) {
-            super(task, value);
-            this.priority = priority;
+        private ThreadAffinityPriorityTask(final PriorityTaskScheduler scheduler, final int priority) {
+            super(scheduler, priority);
+        }
+
+        private static <T> ThreadAffinityPriorityTask<T> create(final PriorityTaskScheduler scheduler,
+                                                                final Callable<T> task,
+                                                                final int priority) {
+            return new ThreadAffinityPriorityTask<T>(scheduler, priority) {
+                @Override
+                public T call() throws Exception {
+                    return task.call();
+                }
+            };
+        }
+
+        /**
+         * Gets thread associated with the asynchronous computation.
+         * <p>
+         * This method is not deterministic and may return {@literal null} if
+         * thread that owns by this task is already completed, stopped or destroyed.
+         *
+         * @return The thread associated with the asynchronous computation.
+         */
+        @Override
+        public final Thread getThread() {
+            return affinity != null ? affinity.get() : null;
+        }
+
+        private void setThread(final Thread value) {
+            affinity = new WeakReference<>(value);
+        }
+
+        private void clearThread(){
+            if(affinity != null) affinity.clear();
+            affinity = null;
         }
 
         @Override
-        public int compareTo(final PriorityFutureTask o) {
-            return Integer.compare(o.priority, priority);
+        protected final  <O> PriorityTask<O> newChildTask(final TaskScheduler scheduler, final Callable<O> task) {
+            return create((PriorityTaskScheduler) scheduler, task, getAsInt());
         }
     }
 
-    private static final class PriorityThreadPoolExecutor extends ThreadPoolExecutor{
-        public final int normalPriority;
-
-        public PriorityThreadPoolExecutor(final int normalPriority,
-                                          final int corePoolSize,
-                                          final int maximumPoolSize,
-                                          final long keepAliveTime,
-                                          final TimeUnit unit,
-                                          final int initialQueueCapacity,
-                                          final ThreadFactory tfactory){
-            super(corePoolSize,
-                    maximumPoolSize,
-                    keepAliveTime,
-                    unit,
-                    new PriorityBlockingQueue<>(initialQueueCapacity),
-                    tfactory);
-            this.normalPriority = normalPriority;
-        }
-
-        private <T> PriorityFutureTask<T> newTaskFor(final Runnable runnable, final T value, final int priority) {
-            return new PriorityFutureTask<>(runnable, value, priority);
-        }
-
-        @Override
-        protected <T> RunnableFuture<T> newTaskFor(final Runnable runnable, final T value) {
-            return newTaskFor(runnable, value, normalPriority);
-        }
-
-        public Future submit(final Runnable task, final int priority) {
-            final RunnableFuture<Void> ftask = newTaskFor(task, null, priority);
-            execute(ftask);
-            return ftask;
-        }
-    }
-
-    private final PriorityThreadPoolExecutor executor;
-    private final ConcurrentHashMap<AsyncResult<?>, Future> activeTasks;
-
-    private PriorityTaskExecutor(final int normalPriority,
+    private PriorityTaskExecutor(final int defaultPriority,
                                  final int corePoolSize,
                                  final int maximumPoolSize,
                                  final long keepAliveTime,
                                  final TimeUnit unit,
                                  final int initialQueueCapacity,
                                  final ThreadFactory tfactory) {
-        executor = new PriorityThreadPoolExecutor(normalPriority,
+        super(defaultPriority,
                 corePoolSize,
                 maximumPoolSize,
                 keepAliveTime,
                 unit,
                 initialQueueCapacity,
                 tfactory);
-        activeTasks = new ConcurrentHashMap<>(initialQueueCapacity);
     }
 
     public PriorityTaskExecutor(final int normalPriority,
@@ -159,7 +156,7 @@ public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
      *     priority-based tasks. If threads are not used they may be stopped by the scheduler. The count of threads
      *     and keep alive time inferred from priority enum semantics.
      * </p>
-     * @param normalPriority The priority used to enqueue tasks with default ({@link #AUTO_PRIORITY}) priority.
+     * @param normalPriority The priority used to submit tasks with default ({@link #AUTO_PRIORITY}) priority.
      * @param <P> Type of the enum elements.
      * @return A new instance of the priority-based task executor.
      */
@@ -168,85 +165,43 @@ public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
         return new PriorityTaskExecutor(normalPriority, 0, s, 30, TimeUnit.SECONDS, s + 1);
     }
 
-    /**
-     * Gets count of currently running tasks.
-     * @return Count of currently running tasks.
-     */
-    public int getActiveTasks(){
-        return activeTasks.size();
-    }
-
-    /**
-     * Returns {@literal true} if this executor has been shut down.
-     *
-     * @return {@literal true} if this executor has been shut down
-     */
-    public boolean isShutdown(){
-        return executor.isShutdown();
-    }
-
-    /**
-     * Returns {@literal true} if all tasks have completed following shut down.
-     * Note that {@code isTerminated} is never {@literal true} unless
-     * either {@code shutdown} or {@code shutdownNow} was called first.
-     *
-     * @return {@literal true} if all tasks have completed following shut down
-     */
-    public boolean isTerminated(){
-        return executor.isTerminated();
-    }
-
-    public void shutdown(){
-        executor.shutdown();
-    }
-
-    public boolean awaitTermination(final long timeout, final TimeUnit unit) throws InterruptedException {
-        return executor.awaitTermination(timeout, unit);
-    }
-
     @Override
-    protected <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task, final int priority) {
-        if (priority < 0) return enqueueTask(task, executor.normalPriority);
-        else activeTasks.put(task, executor.submit(() -> {
-            try {
-                task.run();
-            } finally {
-                activeTasks.remove(task);
-            }
-        }, priority));
-        return task;
+    protected <T> PriorityTask<T> newTaskFor(final Callable<T> callable, final int priority) {
+        return ThreadAffinityPriorityTask.create(this, callable, priority == AUTO_PRIORITY ? defaultPriority : priority);
     }
 
     /**
-     * Interrupts thread associated with the specified asynchronous computation.
+     * Method invoked prior to executing the given Runnable in the
+     * given thread.  This method is invoked by thread {@code t} that
+     * will execute task {@code r}, and may be used to re-initialize
+     * ThreadLocals, or to perform logging.
      * <p>
-     * This is infrastructure method and you should not use it directly from your code.
-     * </p>
+     * <p>This implementation does nothing, but may be customized in
+     * subclasses. Note: To properly nest multiple overridings, subclasses
+     * should generally invoke {@code super.beforeExecute} at the end of
+     * this method.
      *
-     * @param ar The asynchronous computation to interrupt.
-     * @return {@literal true}, if the specified asynchronous computation is interrupted; otherwise, {@literal false}.
+     * @param t the thread that will run task {@code r}
+     * @param r the task that will be executed
      */
     @Override
-    public boolean interrupt(final AsyncResult<?> ar) {
-        final Future<?> f = activeTasks.remove(ar);
-        return f != null && f.cancel(true);
+    protected void beforeExecute(final Thread t, final Runnable r) {
+        if(r instanceof ThreadAffinityPriorityTask<?>)
+            ((ThreadAffinityPriorityTask<?>)r).setThread(t);
     }
 
     /**
-     * Returns a string representation of this executor.
-     * @return A string representation of this executor.
+     * Method invoked upon completion of execution of the given Runnable.
+     * This method is invoked by the thread that executed the task. If
+     * non-null, the Throwable is the uncaught {@code RuntimeException}
+     * or {@code Error} that caused execution to terminate abruptly.
+     *
+     * @param r the runnable that has completed
+     * @param t the exception that caused termination, or null if
      */
     @Override
-    public String toString() {
-        return executor.toString();
-    }
-
-    /**
-     * Releases underlying executor service.
-     */
-    @SuppressWarnings("FinalizeDoesntCallSuperFinalize")
-    @Override
-    protected void finalize() {
-        executor.shutdown();
+    protected void afterExecute(final Runnable r, final Throwable t) {
+        if (r instanceof ThreadAffinityPriorityTask<?>)
+            ((ThreadAffinityPriorityTask<?>) r).clearThread();
     }
 }

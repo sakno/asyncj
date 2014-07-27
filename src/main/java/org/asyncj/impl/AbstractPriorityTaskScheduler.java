@@ -3,10 +3,11 @@ package org.asyncj.impl;
 import org.asyncj.AsyncResult;
 import org.asyncj.PriorityTaskScheduler;
 
-import java.util.Objects;
+import java.util.Comparator;
 import java.util.concurrent.Callable;
-import java.util.concurrent.RunnableFuture;
-import java.util.function.Function;
+import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 import java.util.function.IntSupplier;
 
 /**
@@ -22,46 +23,71 @@ public abstract class AbstractPriorityTaskScheduler extends AbstractTaskSchedule
      */
     protected static final int AUTO_PRIORITY = -1;
 
-    protected AbstractPriorityTaskScheduler(){
+    private static final class PriorityComparator implements Comparator<Runnable> {
+        private final int defaultPriority;
+
+        PriorityComparator(final int defaultPriority) {
+            this.defaultPriority = defaultPriority;
+        }
+
+        private static int getPriority(final Object task, final int defaultPriority) {
+            if (task instanceof IntSupplier)
+                return ((IntSupplier) task).getAsInt();
+            else if (task instanceof ProxyTask<?, ?>)
+                return getPriority((((ProxyTask<?, ?>) task)).parent, defaultPriority);
+            else return defaultPriority;
+        }
+
+        @Override
+        public int compare(final Runnable task1, final Runnable task2) {
+            return Integer.compare(getPriority(task2, defaultPriority), getPriority(task1, defaultPriority));
+        }
     }
 
-    protected abstract <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task, final int priority);
+    protected final int defaultPriority;
 
-    protected <V> PriorityTask<V> createTask(final Callable<? extends V> task, final int priority) {
-        return new PriorityTask<V>(this, priority) {
-            @Override
-            public V call() throws Exception {
-                return task.call();
-            }
-        };
+    protected AbstractPriorityTaskScheduler(final int defaultPriority,
+                                            final int corePoolSize,
+                                            final int maximumPoolSize,
+                                            final long keepAliveTime,
+                                            final TimeUnit unit,
+                                            final int initialQueueCapacity,
+                                            final ThreadFactory threadFactory) {
+        super(corePoolSize,
+                maximumPoolSize,
+                keepAliveTime,
+                unit,
+                new PriorityBlockingQueue<>(initialQueueCapacity, new PriorityComparator(defaultPriority)),
+                threadFactory);
+        this.defaultPriority = defaultPriority;
     }
 
+    /**
+     * Schedules a new task.
+     *
+     * @param task The computation to execute asynchronously.
+     * @return An object that represents state of the asynchronous computation.
+     */
     @Override
-    protected final  <V> Task<V> createTask(final Callable<? extends V> task) {
-        return createTask(task, task instanceof IntSupplier ? ((IntSupplier) task).getAsInt() : AUTO_PRIORITY);
+    public final <O, T extends IntSupplier & Callable<O>> AsyncResult<O> submit(final T task) {
+        final PriorityTask<O> t = newTaskFor(task, task.getAsInt());
+        execute(t);
+        return t;
     }
 
-    @SuppressWarnings("unchecked")
+    protected abstract <T> PriorityTask<T> newTaskFor(final Callable<T> callable, final int priority);
+
+    /**
+     * Returns a {@link org.asyncj.impl.Task} for the given callable task.
+     *
+     * @param callable the callable task being wrapped
+     * @return a {@code RunnableFuture} which, when run, will call the
+     * underlying callable and which, as a {@code Future}, will yield
+     * the callable's result as its result and provide for
+     * cancellation of the underlying task
+     */
     @Override
-    protected final  <V, T extends AsyncResult<V> & RunnableFuture<V>> AsyncResult<V> enqueueTask(final T task) {
-        return enqueueTask(task, task instanceof IntSupplier ? ((IntSupplier) task).getAsInt() : AUTO_PRIORITY);
-    }
-
-    private <O> AsyncResult<O> enqueue(final PriorityTask<O> task){
-        if(isScheduled(task))
-            return enqueueTask(task, task.getAsInt());
-        else throw new IllegalArgumentException(String.format("Task %s is not scheduled by this scheduler", task));
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public final <O, T extends IntSupplier & Callable<? extends O>> AsyncResult<O> enqueue(final T task) {
-        Objects.requireNonNull(task, "task is null.");
-        return task instanceof PriorityTask<?> ? enqueue((PriorityTask<O>)task) : enqueue(createTask(task));
-    }
-
-    @Override
-    public final <O, T extends AsyncResult<O> & RunnableFuture<O>, F extends IntSupplier & Function<PriorityTaskScheduler, T>> AsyncResult<O> enqueueDirect(final F taskFactory) {
-        return enqueueTask(taskFactory.apply(this), taskFactory.getAsInt());
+    protected final <T> PriorityTask<T> newTaskFor(final Callable<T> callable) {
+        return newTaskFor(callable, callable instanceof IntSupplier ? ((IntSupplier) callable).getAsInt() : AUTO_PRIORITY);
     }
 }

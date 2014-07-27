@@ -14,7 +14,7 @@ import java.util.function.IntSupplier;
  * @since 1.0
  * @version 1.0
  */
-public abstract class PriorityTask<V> extends Task<V> implements IntSupplier{
+public abstract class PriorityTask<V> extends Task<V> implements Comparable<PriorityTask>, IntSupplier{
     private final int priority;
 
     /**
@@ -41,13 +41,18 @@ public abstract class PriorityTask<V> extends Task<V> implements IntSupplier{
     }
 
     @Override
-    final <O> PriorityTask<O> newChildTask(final TaskScheduler scheduler, final Callable<? extends O> task) {
+    protected <O> PriorityTask<O> newChildTask(final TaskScheduler scheduler, final Callable<O> task) {
         return new PriorityTask<O>(scheduler, priority) {
             @Override
             public O call() throws Exception {
                 return task.call();
             }
         };
+    }
+
+    @Override
+    public final int compareTo(final PriorityTask o) {
+        return Integer.compare(o.getAsInt(), getAsInt());
     }
 
     @Override

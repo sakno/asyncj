@@ -36,7 +36,7 @@ final class ArrayOperations extends ActiveObject {
     }
 
     public <T> AsyncResult<T[]> reverseArray(final T[] array){
-        return enqueue(()->reverseArraySync(array));
+        return submit(() -> reverseArraySync(array));
     }
 
     public <T> void reverseArray(final T[] array, final AsyncCallback<T[]> callback){
@@ -44,7 +44,7 @@ final class ArrayOperations extends ActiveObject {
     }
 
     public <T> AsyncResult<T[]> reverseArrayLongTime(final T[] array) {
-        return enqueue(() -> reverseArraySyncLongTime(array));
+        return submit(() -> reverseArraySyncLongTime(array));
     }
 
     public <T> void reverseArrayLongTime(final T[] array, final AsyncCallback<T[]> callback) {

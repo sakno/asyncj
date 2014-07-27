@@ -5,7 +5,6 @@ import org.asyncj.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -54,6 +53,7 @@ public abstract class Task<V> extends AbstractQueuedSynchronizer implements Asyn
         setState(CREATED_STATE);
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler is null.");
         result = null;
+        error = null;
         nextTask = new AtomicReference<>(null);
         preventTransition = false;
     }
@@ -63,7 +63,7 @@ public abstract class Task<V> extends AbstractQueuedSynchronizer implements Asyn
         return nextTask.updateAndGet(nextTask -> nextTask == null ? childTask : nextTask.appendChildTask(childTask));
     }
 
-    private <O> Task<O> createAndAppendChildTask(final Callable<? extends O> task) {
+    private <O> Task<O> createAndAppendChildTask(final Callable<O> task) {
         return appendChildTask(newChildTask(scheduler, task));
     }
 
@@ -291,7 +291,14 @@ public abstract class Task<V> extends AbstractQueuedSynchronizer implements Asyn
     @Override
     public abstract V call() throws Exception;
 
-    <O> Task<O> newChildTask(final TaskScheduler scheduler, final Callable<? extends O> task){
+    /**
+     * Creates a new instance of the child task.
+     * @param scheduler The scheduler that owns by the newly created task. Cannot be {@literal null}.
+     * @param task The implementation of the child task. Cannot be {@literal null}.
+     * @param <O> Type of the asynchronous computation result.
+     * @return A new instance of the child task.
+     */
+    protected <O> Task<O> newChildTask(final TaskScheduler scheduler, final Callable<O> task){
         return new Task<O>(scheduler) {
             @Override
             public O call() throws Exception {

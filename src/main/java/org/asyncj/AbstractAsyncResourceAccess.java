@@ -2,7 +2,6 @@ package org.asyncj;
 
 import java.util.Objects;
 import java.util.function.Function;
-import java.util.function.IntSupplier;
 
 /**
  * Represents a container that wraps plain Java object into active object.
@@ -32,7 +31,7 @@ public abstract class AbstractAsyncResourceAccess<R> extends ActiveObject implem
 
     private <V> AsyncResult<V> get(final ThrowableFunction<R, V> reader, final R resource){
         Objects.requireNonNull(reader, "reader is null.");
-        return enqueue(()->reader.apply(resource));
+        return submit(() -> reader.apply(resource));
     }
 
     /**
@@ -52,7 +51,7 @@ public abstract class AbstractAsyncResourceAccess<R> extends ActiveObject implem
      */
     @Override
     public final void get(final AsyncCallback<R> callback) {
-        enqueue(callback, getResource());
+        submit(callback, getResource());
     }
 
     /**

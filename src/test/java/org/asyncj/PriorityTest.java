@@ -7,7 +7,6 @@ import org.junit.Test;
 import java.time.Duration;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeoutException;
 import java.util.function.IntSupplier;
 
@@ -45,13 +44,13 @@ public final class PriorityTest extends Assert {
             Thread.sleep(100);
             return 42;
         };
-        scheduler.enqueue(normPriv);
-        scheduler.enqueue(normPriv);
-        scheduler.enqueue(normPriv);
-        scheduler.enqueue(normPriv);
-        final AsyncResult<Integer> normResult = scheduler.enqueue(normPriv);
-        scheduler.enqueue(AsyncUtils.prioritize(highPriv, Priority.HIGHEST));
-        final AsyncResult<Integer> highResult = scheduler.enqueue(AsyncUtils.prioritize(highPriv, Priority.HIGHEST));
+        scheduler.submit(normPriv);
+        scheduler.submit(normPriv);
+        scheduler.submit(normPriv);
+        scheduler.submit(normPriv);
+        final AsyncResult<Integer> normResult = scheduler.submit(normPriv);
+        scheduler.submit(AsyncUtils.prioritize(highPriv, Priority.HIGHEST));
+        final AsyncResult<Integer> highResult = scheduler.submit(AsyncUtils.prioritize(highPriv, Priority.HIGHEST));
         //the task with highest priority must be completed before the task with normal priority ignoring scheduling order
         assertEquals(42, (int)highResult.get(Duration.ofSeconds(1000)));
         assertFalse(normResult.isDone());

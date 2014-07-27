@@ -38,7 +38,7 @@ import java.util.function.*;
  *              }
  *
  *              public &lt;T&gt; AsyncResult&lt;T[]&gt; reverseArray(final T[] array){
- *                  return super.enqueue(()-&gt; reverseArraySync(array));
+ *                  return super.submit(()-&gt; reverseArraySync(array));
  *              }
  *
  *              public &lt;T&gt; void reverseArray(final T[] array, final AsyncCallback&lt;T[]&gt; callback){
@@ -51,9 +51,9 @@ import java.util.function.*;
  *  <ul>
  *      <li>Instantiate task scheduler which implements {@link org.asyncj.PriorityTaskScheduler} interface. The default
  *      implementation provided by {@link org.asyncj.impl.PriorityTaskExecutor}</li>
- *      <li>Use priority-based enqueue protected methods from {@code ActiveObject} (such as {@link #enqueue(java.util.concurrent.Callable, Enum)}
- *      or {@link #mapReduce(java.util.Iterator, java.util.function.BiFunction, Object, Enum)}) instead of enqueue methods without
- *      {@code priority} parameter (such as {@link #enqueue(java.util.concurrent.Callable)}).</li>
+ *      <li>Use priority-based submit protected methods from {@code ActiveObject} (such as {@link #submit(java.util.concurrent.Callable, Enum)}
+ *      or {@link #mapReduce(java.util.Iterator, java.util.function.BiFunction, Object, Enum)}) instead of submit methods without
+ *      {@code priority} parameter (such as {@link #submit(java.util.concurrent.Callable)}).</li>
  *      <li>Declare an {@code enum} that represents all possible priorities and implements {@link java.util.function.IntSupplier} interface.</li>
  *  </ul>
  *  The following example demonstrates how to write active object with priority support:
@@ -89,7 +89,7 @@ import java.util.function.*;
  *      }
  *
  *      public &lt;T&gt; AsyncResult&lt;T[]&gt; reverseArray(final T[] array){
- *          return enqueue(()-&gt; reverseArraySync(array), Priority.HIGH);
+ *          return submit(()-&gt; reverseArraySync(array), Priority.HIGH);
  *      }
  *
  *      public &lt;T&gt; void reverseArray(final T[] array, final AsyncCallback&lt;T[]&gt; callback){
@@ -117,7 +117,7 @@ public abstract class ActiveObject {
     }
 
     private <T, P extends Enum<P> & IntSupplier> AsyncResult<T> prioritizeScalar(final T value, final P priority) {
-        return enqueue(() -> value, priority);
+        return submit(() -> value, priority);
     }
 
     /**
@@ -128,7 +128,7 @@ public abstract class ActiveObject {
      * @return Already completed asynchronous result that represents passed object.
      */
     protected final <O> AsyncResult<O> successful(final O value) {
-        return scheduler.successful(value);
+        return AsyncUtils.successful(scheduler, value);
     }
 
     /**
@@ -139,29 +139,29 @@ public abstract class ActiveObject {
      * @return Already completed asynchronous result that represents passed exception.
      */
     protected final <O> AsyncResult<O> failure(final Exception err) {
-        return scheduler.failure(err);
+        return AsyncUtils.failure(scheduler, err);
     }
 
     /**
      * Enqueue a new task for asynchronous execution.
      * <p>
-     * Call {@link #enqueue(java.util.concurrent.Callable, Enum)} instead of this method
+     * Call {@link #submit(java.util.concurrent.Callable, Enum)} instead of this method
      * if this active object use priority-based task scheduler.
      * </p>
      *
      * @param task The task to schedule. Cannot be {@literal null}.
      * @param <O>  Type of the computation result.
      * @return An object that represents state of the asynchronous computation.
-     * @see #enqueue(java.util.concurrent.Callable, Enum)
+     * @see #submit(java.util.concurrent.Callable, Enum)
      */
-    protected final <O> AsyncResult<O> enqueue(final Callable<? extends O> task) {
-        return scheduler.enqueue(task);
+    protected final <O> AsyncResult<O> submit(final Callable<O> task) {
+        return scheduler.submit(task);
     }
 
     /**
      * Enqueue a new task for asynchronous execution with given priority.
      * <p>
-     * Call {@link #enqueue(java.util.concurrent.Callable)} instead of this method
+     * Call {@link #submit(java.util.concurrent.Callable)} instead of this method
      * if this active object don't use priority-based task scheduler.
      * </p>
      *
@@ -170,27 +170,27 @@ public abstract class ActiveObject {
      * @param <O>      Type of the computation result.
      * @param <P>      Type of the enum that represents all available priorities.
      * @return An object that represents state of the asynchronous computation.
-     * @see #enqueue(java.util.concurrent.Callable)
+     * @see #submit(java.util.concurrent.Callable)
      */
-    protected final <O, P extends Enum<P> & IntSupplier> AsyncResult<O> enqueue(final Callable<O> task, final P priority) {
-        return enqueue(AsyncUtils.prioritize(task, priority));
+    protected final <O, P extends Enum<P> & IntSupplier> AsyncResult<O> submit(final Callable<O> task, final P priority) {
+        return submit(AsyncUtils.prioritize(task, priority));
     }
 
     /**
      * Enqueue a new callback for asynchronous execution.
      * <p>
-     * Call {@link #enqueue(AsyncCallback, Object, Enum)} instead of this method
+     * Call {@link #submit(AsyncCallback, Object, Enum)} instead of this method
      * if this active object use priority-based task scheduler.
      * </p>
      *
      * @param callback The callback to schedule. Cannot be {@literal null}.
      * @param value    The value to be passed into the callback at execution time.
      * @param <I>      Type of the value to be passed into the callback at execution time.
-     * @see #enqueue(AsyncCallback, Object, Enum)
+     * @see #submit(AsyncCallback, Object, Enum)
      */
-    protected final <I> void enqueue(final AsyncCallback<? super I> callback, final I value) {
+    protected final <I> void submit(final AsyncCallback<? super I> callback, final I value) {
         Objects.requireNonNull(callback, "callback is null.");
-        this.<Void>enqueue(() -> {
+        this.<Void>submit(() -> {
             callback.invoke(value, null);
             return null;
         });
@@ -199,7 +199,7 @@ public abstract class ActiveObject {
     /**
      * Enqueue a new callback for asynchronous execution with given priority.
      * <p>
-     * Call {@link #enqueue(AsyncCallback, Object)} instead of this method
+     * Call {@link #submit(AsyncCallback, Object)} instead of this method
      * if this active object don't use priority-based task scheduler.
      * </p>
      *
@@ -208,11 +208,11 @@ public abstract class ActiveObject {
      * @param priority The priority of the task. Cannot be {@literal null}.
      * @param <I>      Type of the value to be passed into the callback at execution time.
      * @param <P>      Type of the enum that represents all available priorities.
-     * @see #enqueue(AsyncCallback, Object)
+     * @see #submit(AsyncCallback, Object)
      */
-    protected final <I, P extends Enum<P> & IntSupplier> void enqueue(final AsyncCallback<? super I> callback, final I value, final P priority) {
+    protected final <I, P extends Enum<P> & IntSupplier> void submit(final AsyncCallback<? super I> callback, final I value, final P priority) {
         Objects.requireNonNull(callback, "callback is null.");
-        this.<Void, P>enqueue(() -> {
+        this.<Void, P>submit(() -> {
             callback.invoke(value, null);
             return null;
         }, priority);
@@ -221,17 +221,17 @@ public abstract class ActiveObject {
     /**
      * Enqueue a new callback for asynchronous computation.
      * <p>
-     * Call {@link #enqueue(AsyncCallback, java.lang.Exception, Enum)} instead of this method
+     * Call {@link #submit(AsyncCallback, java.lang.Exception, Enum)} instead of this method
      * if this active object use priority-based task scheduler.
      * </p>
      *
      * @param callback The callback to schedule. Cannot be {@literal null}.
      * @param err      An instance of the exception to be passed into callback at execution time.
-     * @see #enqueue(AsyncCallback, Exception, Enum)
+     * @see #submit(AsyncCallback, Exception, Enum)
      */
-    protected final void enqueue(final AsyncCallback<?> callback, final Exception err) {
+    protected final void submit(final AsyncCallback<?> callback, final Exception err) {
         Objects.requireNonNull(callback, "callback is null.");
-        this.<Void>enqueue(() -> {
+        this.<Void>submit(() -> {
             callback.invoke(null, err);
             return null;
         });
@@ -240,7 +240,7 @@ public abstract class ActiveObject {
     /**
      * Enqueue a new callback for asynchronous computation with given priority.
      * <p>
-     * Call {@link #enqueue(AsyncCallback, java.lang.Exception)} instead of this method
+     * Call {@link #submit(AsyncCallback, java.lang.Exception)} instead of this method
      * if this active object don't use priority-based task scheduler.
      * </p>
      *
@@ -248,11 +248,11 @@ public abstract class ActiveObject {
      * @param err      An instance of the exception to be passed into callback at execution time.
      * @param priority The priority of the task. Cannot be {@literal null}.
      * @param <P>      Type of the enum that represents all available priorities.
-     * @see #enqueue(AsyncCallback, java.lang.Exception)
+     * @see #submit(AsyncCallback, java.lang.Exception)
      */
-    protected final <P extends Enum<P> & IntSupplier> void enqueue(final AsyncCallback<?> callback, final Exception err, final P priority) {
+    protected final <P extends Enum<P> & IntSupplier> void submit(final AsyncCallback<?> callback, final Exception err, final P priority) {
         Objects.requireNonNull(callback, "callback is null.");
-        this.<Void, P>enqueue(() -> {
+        this.<Void, P>submit(() -> {
             callback.invoke(null, err);
             return null;
         }, priority);

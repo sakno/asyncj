@@ -102,7 +102,7 @@ public final class AsyncUtils {
 
     /**
      * Iterates over collection and performs filtering and summary operation.
-     * @param scheduler The scheduler used to enqueue map-reduce operation. Cannot be {@literal null}.
+     * @param scheduler The scheduler used to submit map-reduce operation. Cannot be {@literal null}.
      * @param collection The collection to process. Cannot be {@literal null}.
      * @param mr An object that implements map/reduce logic. Cannot be {@literal null}.
      * @param initialValue The initial value passed to the map-reduce algorithm at first iteration.
@@ -119,15 +119,15 @@ public final class AsyncUtils {
             public AsyncResult<O> apply(O accumulator) {
                 if (collection.hasNext()) {
                     accumulator = mr.apply(collection.next(), accumulator);
-                    return scheduler.successful(accumulator).then(this);
-                } else return scheduler.successful(accumulator);
+                    return successful(scheduler, accumulator).then(this);
+                } else return successful(scheduler, accumulator);
             }
         });
     }
 
     /**
      * Iterates over collection and performs filtering and summary operation.
-     * @param scheduler The scheduler used to enqueue map-reduce operation. Cannot be {@literal null}.
+     * @param scheduler The scheduler used to submit map-reduce operation. Cannot be {@literal null}.
      * @param collection The collection to process. Cannot be {@literal null}.
      * @param mr An object that implements map/reduce logic. Cannot be {@literal null}.
      * @param initialValue The initial value passed to the map-reduce algorithm at first iteration.
@@ -139,12 +139,12 @@ public final class AsyncUtils {
                                                   final Iterator<? extends I> collection,
                                                   final BiFunction<? super I, ? super O, ? extends O> mr,
                                                   final O initialValue) {
-        return mapReduce(scheduler, collection, mr, scheduler.successful(initialValue));
+        return mapReduce(scheduler, collection, mr, successful(scheduler, initialValue));
     }
 
     /**
      * Iterates over collection and performs filtering and summary operation.
-     * @param scheduler The scheduler used to enqueue map-reduce operation. Cannot be {@literal null}.
+     * @param scheduler The scheduler used to submit map-reduce operation. Cannot be {@literal null}.
      * @param collection The collection to process. Cannot be {@literal null}.
      * @param mr An object that implements map/reduce logic. Cannot be {@literal null}.
      * @param initialValue The initial value passed to the map-reduce algorithm at first iteration. Cannot be {@literal null}.
@@ -160,14 +160,14 @@ public final class AsyncUtils {
         return initialValue.then(new Function<O, AsyncResult<O>>() {
             @Override
             public AsyncResult<O> apply(final O accumulator) {
-                return collection.hasNext() ? mr.apply(collection.next(), accumulator).then(this) : scheduler.successful(accumulator);
+                return collection.hasNext() ? mr.apply(collection.next(), accumulator).then(this) : successful(scheduler, accumulator);
             }
         });
     }
 
     /**
      * Iterates over collection and performs filtering and summary operation.
-     * @param scheduler The scheduler used to enqueue map-reduce operation. Cannot be {@literal null}.
+     * @param scheduler The scheduler used to submit map-reduce operation. Cannot be {@literal null}.
      * @param collection The collection to process. Cannot be {@literal null}.
      * @param mr An object that implements map/reduce logic. Cannot be {@literal null}.
      * @param initialValue The initial value passed to the map-reduce algorithm at first iteration.
@@ -179,7 +179,7 @@ public final class AsyncUtils {
                                                   final Iterator<? extends I> collection,
                                                   final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
                                                   final O initialValue) {
-        return mapReduceAsync(scheduler, collection, mr, scheduler.successful(initialValue));
+        return mapReduceAsync(scheduler, collection, mr, successful(scheduler, initialValue));
     }
 
     /**
@@ -216,17 +216,17 @@ public final class AsyncUtils {
     static <I, O> AsyncResult<O> reduce(final TaskScheduler scheduler,
                                         final Iterator<AsyncResult<I>> values,
                                         final ThrowableFunction<? super Collection<I>, O> acc,
-                                        final Callable<? extends Collection<I>> initialVector){
+                                        final Callable<Collection<I>> initialVector){
         return mapReduceAsync(scheduler,
                 values,
                 (AsyncResult<I> result, Collection<I> collection) -> result.then((I elem) -> { collection.add(elem); return collection; }),
-                scheduler.enqueue(initialVector)).
+                scheduler.submit(initialVector)).
                 then(acc);
     }
 
     /**
      * Reduces the specified collection.
-     * @param scheduler The scheduler used to enqueue reduce operation. Cannot be {@literal null}.
+     * @param scheduler The scheduler used to submit reduce operation. Cannot be {@literal null}.
      * @param values An iterator over collection to reduce. Cannot be {@literal null}.
      * @param accumulator Associative, non-interfering and stateless function for combining two values. Cannot be {@literal null}.
      * @param <I> Type of the elements in the input collection.
@@ -245,20 +245,20 @@ public final class AsyncUtils {
     static <I, O> AsyncResult<O> reduceAsync(final TaskScheduler scheduler,
                                                     final Iterator<AsyncResult<I>> values,
                                                     final Function<? super Collection<I>, AsyncResult<O>> reducer,
-                                                    final Callable<? extends Collection<I>> initialVector) {
+                                                    final Callable<Collection<I>> initialVector) {
         return mapReduceAsync(scheduler,
                 values,
                 (AsyncResult<I> result, Collection<I> collection) -> values.next().then((I elem) -> {
                     collection.add(elem);
                     return collection;
                 }),
-                scheduler.enqueue(initialVector)).
+                scheduler.submit(initialVector)).
                 then(reducer);
     }
 
     /**
      * Reduces the specified collection.
-     * @param scheduler The scheduler used to enqueue reduce operation. Cannot be {@literal null}.
+     * @param scheduler The scheduler used to submit reduce operation. Cannot be {@literal null}.
      * @param values An iterator over collection to reduce. Cannot be {@literal null}.
      * @param accumulator Associative, non-interfering and stateless function for combining two values. Cannot be {@literal null}.
      * @param <I> Type of the elements in the input collection.
@@ -278,7 +278,7 @@ public final class AsyncUtils {
      *     The loop iterations are sequential in time but not blocks the task scheduler thread.
      *     This version of while-do loop supports iteration with asynchronous result.
      * </p>
-     * @param scheduler The scheduler used to enqueue loop iterations. Cannot be {@literal null}.
+     * @param scheduler The scheduler used to submit loop iterations. Cannot be {@literal null}.
      * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
      * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
      * @param <I> Type of the looping state.
@@ -291,7 +291,7 @@ public final class AsyncUtils {
             @Override
             public AsyncResult<I> apply(final I current) {
                 return predicate.apply(current).then((Boolean success) -> {
-                    final AsyncResult<I> next = scheduler.successful(current);
+                    final AsyncResult<I> next = successful(scheduler, current);
                     return success ? next.then(this) : next;
                 });
             }
@@ -304,7 +304,7 @@ public final class AsyncUtils {
      *     The loop iterations are sequential in time but not blocks the task scheduler thread.
      *     This version of while-do loop supports iteration with asynchronous result.
      * </p>
-     * @param scheduler The scheduler used to enqueue loop iterations. Cannot be {@literal null}.
+     * @param scheduler The scheduler used to submit loop iterations. Cannot be {@literal null}.
      * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
      * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
      * @param <I> Type of the looping state.
@@ -313,7 +313,7 @@ public final class AsyncUtils {
     public static <I> AsyncResult<I> untilAsync(final TaskScheduler scheduler,
                                                 final Function<? super I, AsyncResult<Boolean>> predicate,
                                                 final I initialState) {
-        return untilAsync(scheduler, predicate, scheduler.successful(initialState));
+        return untilAsync(scheduler, predicate, successful(scheduler, initialState));
     }
 
     /**
@@ -321,7 +321,7 @@ public final class AsyncUtils {
      * <p>
      * The loop iterations are sequential in time but not blocks the task scheduler thread.
      *
-     * @param scheduler The scheduler used to enqueue loop iterations. Cannot be {@literal null}.
+     * @param scheduler The scheduler used to submit loop iterations. Cannot be {@literal null}.
      * @param condition Loop condition checker. If checker returns {@literal false} then loop will breaks. Cannot be {@literal null}.
      * @param iteration Loop transformation procedure. Cannot be {@literal null}.
      * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
@@ -336,8 +336,8 @@ public final class AsyncUtils {
             @Override
             public AsyncResult<I> apply(final I current) {
                 return condition.test(current) ?
-                        scheduler.successful(iteration.apply(current)).then(this) :
-                        scheduler.successful(current);
+                        successful(scheduler, iteration.apply(current)).then(this) :
+                        successful(scheduler, current);
             }
         });
     }
@@ -347,7 +347,7 @@ public final class AsyncUtils {
      * <p>
      *     The loop iterations are sequential in time but not blocks the task scheduler thread.
      * </p>
-     * @param scheduler The scheduler used to enqueue loop iterations. Cannot be {@literal null}.
+     * @param scheduler The scheduler used to submit loop iterations. Cannot be {@literal null}.
      * @param condition Loop condition checker. If checker returns {@literal false} then loop will breaks. Cannot be {@literal null}.
      * @param iteration Loop transformation procedure. Cannot be {@literal null}.
      * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
@@ -358,7 +358,7 @@ public final class AsyncUtils {
                                            final Predicate<? super I> condition,
                                            final Function<? super I, ? extends I> iteration,
                                            final I initialState) {
-        return until(scheduler, condition, iteration, scheduler.successful(initialState));
+        return until(scheduler, condition, iteration, successful(scheduler, initialState));
     }
 
     /**
@@ -366,7 +366,7 @@ public final class AsyncUtils {
      * <p>
      *     The loop iterations are sequential in time but not blocks the task scheduler thread.
      * </p>
-     * @param scheduler The scheduler used to enqueue loop iterations. Cannot be {@literal null}.
+     * @param scheduler The scheduler used to submit loop iterations. Cannot be {@literal null}.
      * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
      * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
      * @param <I> Type of the looping state.
@@ -378,7 +378,7 @@ public final class AsyncUtils {
         return initialState.then(new Function<I, AsyncResult<I>>() {
             @Override
             public AsyncResult<I> apply(final I current) {
-                final AsyncResult<I> next = scheduler.successful(current);
+                final AsyncResult<I> next = successful(scheduler, current);
                 return predicate.test(current) ? next.then(this) : next;
             }
         });
@@ -389,7 +389,7 @@ public final class AsyncUtils {
      * <p>
      *     The loop iterations are sequential in time but not blocks the task scheduler thread.
      * </p>
-     * @param scheduler The scheduler used to enqueue loop iterations. Cannot be {@literal null}.
+     * @param scheduler The scheduler used to submit loop iterations. Cannot be {@literal null}.
      * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
      * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
      * @param <I> Type of the looping state.
@@ -398,7 +398,7 @@ public final class AsyncUtils {
     public static <I> AsyncResult<I> until(final TaskScheduler scheduler,
                             final Predicate<I> predicate,
                             final I initialState){
-        return until(scheduler, predicate, scheduler.successful(initialState));
+        return until(scheduler, predicate, successful(scheduler, initialState));
     }
 
     /**
@@ -445,7 +445,7 @@ public final class AsyncUtils {
      * @param <P> The type of the enum representing priority.
      * @return An instance of the task with attached priority.
      */
-    public static <V, P extends Enum<P> & IntSupplier> Callable<? extends V> prioritize(final Callable<? extends V> task, final P priority){
+    public static <V, P extends Enum<P> & IntSupplier> Callable<V> prioritize(final Callable<V> task, final P priority){
         return new PriorityCallable<>(task, priority);
     }
 }
