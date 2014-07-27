@@ -16,9 +16,38 @@ The second aim is to demonstrate Java 8 features, such as [Lambda Expression](ht
 AsyncJ is very lightweight thing. The implementation consists of 20 classes (approximately) from which 4 classes intended for use from user code.
 Despite the simple implementation, AsyncJ API is very powerful and provides the following features:
 * Promise pipelining
-* Bundlized for OSGi
+* OSGi compatible
 * Active Object support
 * Core asynchronous algorithms: reduce, map-reduce, while-do
+
+### Examples
+Promise pipelining:
+```java
+final AsyncResult<Integer> ar = AsyncUtils.getGlobalScheduler().submit(() -> 42);
+final Integer result = ar.then(i -> i * 2).then(i -> i + 10).get(); 
+```
+
+Compatibility with Java Future:
+```java
+final Future<Integer> f = AsyncUtils.getGlobalScheduler().submit(() -> 42).then(i -> i + 1); 
+```
+
+Asynchronous try-catch:
+```java
+p.then((Integer i) -> Integer.toString(i + 1), (Exception err) -> err.toString());
+```
+
+Callbacks:
+```java
+public void sum(final AsyncCallback<Integer> callback){
+    p.onCompleted((i, err1)->{
+      c.onCompleted((g, err2)->{
+        if(err2 != null) callback.invoke(null, err2);
+        else callback.invoke(i + g, null);
+      });
+    });
+}
+```
 
 ## Requirements
 This library requires Java 8 SE or later.
