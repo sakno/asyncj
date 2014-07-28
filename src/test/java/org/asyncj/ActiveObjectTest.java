@@ -42,7 +42,6 @@ public final class ActiveObjectTest extends Assert {
 
     @Test
     public void asyncContinuationTest() throws ExecutionException, InterruptedException, TimeoutException {
-        final ArrayOperations obj = new ArrayOperations();
         final AsyncResult<Integer[]> array = AsyncUtils.getGlobalScheduler()
                 .submit(() -> new Integer[5])
                 .then((Integer[] a) -> {
@@ -116,6 +115,7 @@ public final class ActiveObjectTest extends Assert {
         for(int i = 0; i< arr.length; i++)
             arr[i] = i + 10;
         final AsyncResult<Integer[]> ar = obj.reverseArrayLongTime(arr);
+        Thread.sleep(300);//task must be executed inside of the thread, or cancel request will return false
         assertTrue(ar.cancel(true));
         final AsyncResult<Integer[]> a = ar.then(ThrowableFunction.<Integer[]>identity());
         a.get(5, TimeUnit.SECONDS);
@@ -179,7 +179,7 @@ public final class ActiveObjectTest extends Assert {
                 Arrays.asList(array).iterator(),
                 (input, output) -> AsyncUtils.successful(AsyncUtils.getGlobalScheduler(), output + input),
                 "");
-        assertEquals("12345678910", result.get(Duration.ofSeconds(5)));
+        assertEquals("12345678910", result.get(Duration.ofSeconds(20)));
     }
 
     @Test
@@ -214,6 +214,6 @@ public final class ActiveObjectTest extends Assert {
                 i -> i < 1000,  //condition
                 i -> i * 2,     //loop body
                 1);
-        assertEquals(1024, (int) result.get(Duration.ofSeconds(4)));
+        assertEquals(1024, (int) result.get(Duration.ofSeconds(20)));
     }
 }
