@@ -21,6 +21,9 @@ Despite the simple implementation, AsyncJ API is very powerful and provides the 
 * Active Object support
 * Core asynchronous algorithms: reduce, map-reduce, while-do
 
+
+For more information about functionality and performance see project Wiki.
+
 ### Examples
 Promise pipelining:
 ```java
