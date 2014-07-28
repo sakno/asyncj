@@ -16,8 +16,9 @@ import java.util.function.*;
  * <p>
  *     This class provides a few groups of routines for advanced asynchronous computation:
  *     <ul>
+ *         <li>Asynchronous primitives - a set of method for creating asynchronous primitives, such as scalars.</li>
  *         <li>Algorithms - asynchronous implementation of core data processing algorithms, such as MapReduce and Reduce.
- *         The methods with {@code Async} postfix are used when accumulator or MapReduce iteration cannot be implemented
+ *         The methods with {@code flat} prefix are used when accumulator or MapReduce iteration cannot be implemented
  *         in the synchronous style.</li>
  *         <li>Factory of thread factory - helper methods allows to create an instances of {@link java.util.concurrent.ThreadFactory}
  *         with specified parameters. These methods are useful for task scheduler writers only.</li>
@@ -52,7 +53,6 @@ public final class AsyncUtils {
     }
 
     private AsyncUtils(){
-
     }
 
     private static TaskScheduler globalScheduler;
@@ -60,6 +60,7 @@ public final class AsyncUtils {
 
     /**
      * Gets global task scheduler for executing asynchronous computation not associated with any active object.
+     * This method is not thread-safe.
      * @return An instance of the global scheduler.
      * @see #setGlobalScheduler(TaskScheduler)
      */
@@ -71,6 +72,7 @@ public final class AsyncUtils {
 
     /**
      * Sets the global task scheduler for executing asynchronous computation not associated with any active object.
+     * This method is not thread-safe.
      * <p>
      * The global scheduler may be changed once for entire JVM process.
      *
@@ -83,22 +85,63 @@ public final class AsyncUtils {
         return useOverriddenScheduler = true;
     }
 
+    /**
+     * Shuts down the global scheduler and releases all resources associated with it.
+     * This method is not thread-safe.
+     * <p>
+     * It is recommended to call this method inside of JVM shutdown hooks
+     * @see Runtime#addShutdownHook(Thread)
+     */
+    public static void shutdownGlobalScheduler() {
+        useOverriddenScheduler = false;
+        if (globalScheduler != null) globalScheduler.shutdown();
+        globalScheduler = null;
+    }
+
+    /**
+     * Wraps the scalar into the asynchronous result.
+     * @param scheduler The scheduler used to submit trivial task which returns the specified value. Cannot be {@literal null}.
+     * @param value The value returned from the asynchronous computation.
+     * @param <V> Type of the scalar.
+     * @return A new scheduled task which returns the specified input argument.
+     */
     public static <V> AsyncResult<V> successful(final TaskScheduler scheduler, final V value) {
-        return scheduler.submit(() -> value);
+        return Objects.requireNonNull(scheduler , "scheduler is null.").submit(() -> value);
     }
 
+    /**
+     * Wraps the specified exception into the asynchronous result.
+     * @param scheduler The scheduler used to submit trivial task which throws the specified exception. Cannot be {@literal null}.
+     * @param error An error to be thrown asynchronously. Cannot be {@literal null}.
+     * @param <V> Type of the asynchronous result which never returns.
+     * @return A new task that throws the specified exception asynchronously.
+     * @see #failure(TaskScheduler, java.util.function.Supplier)
+     */
+    @SuppressWarnings("ThrowableResultOfMethodCallIgnored")
     public static <V> AsyncResult<V> failure(final TaskScheduler scheduler, final Exception error) {
-        final Callable<V> task = () -> {
+        Objects.requireNonNull(error, "error is null.");
+        return Objects.requireNonNull(scheduler, "scheduler is null.").submit((Callable<V>) () -> {
             throw error;
-        };
-        return scheduler.submit(task);
+        });
     }
 
+    /**
+     * Wraps the specified exception into the asynchronous result.
+     * <p>
+     * The exception factory will be called asynchronously, not immediately. Therefore, this
+     * method is most preferred way (in compare with {@link #failure(TaskScheduler, Exception)} method) to create
+     * exceptional tasks because created exception will have
+     * a valid call stack.
+     *
+     * @param scheduler The scheduler used to submit trivial task which throws the specified exception. Cannot be {@literal null}.
+     * @param errorFactory A factory that produces an instance of the exception to be thrown asynchronously.
+     * @param <V> Type of the asynchronous result which never returns.
+     * @return A new task that throws the specified exception asynchronously.
+     */
     public static <V> AsyncResult<V> failure(final TaskScheduler scheduler, final Supplier<Exception> errorFactory) {
-        final Callable<V> task = () -> {
+        return scheduler.submit((Callable<V>) () -> {
             throw errorFactory.get();
-        };
-        return scheduler.submit(task);
+        });
     }
 
     public static <V> AsyncResult<V> cancellation(final TaskScheduler scheduler) {
@@ -157,10 +200,10 @@ public final class AsyncUtils {
      * @param <O> Type of the reduced result.
      * @return An object that represents asynchronous result of the map-reduce algorithm.
      */
-    public static <I, O> AsyncResult<O> mapReduceAsync(final TaskScheduler scheduler,
-                                                  final Iterator<? extends I> collection,
-                                                  final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
-                                                  final AsyncResult<O> initialValue) {
+    public static <I, O> AsyncResult<O> flatMapReduce(final TaskScheduler scheduler,
+                                                      final Iterator<? extends I> collection,
+                                                      final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
+                                                      final AsyncResult<O> initialValue) {
         //(O accumulator) -> collection.hasNext() ? mr.apply(collection.next(), accumulator) : scheduler.successful(accumulator)
         return initialValue.then(new Function<O, AsyncResult<O>>() {
             @Override
@@ -180,11 +223,11 @@ public final class AsyncUtils {
      * @param <O> Type of the reduced result.
      * @return An object that represents asynchronous result of the map-reduce algorithm.
      */
-    public static <I, O> AsyncResult<O> mapReduceAsync(final TaskScheduler scheduler,
-                                                  final Iterator<? extends I> collection,
-                                                  final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
-                                                  final O initialValue) {
-        return mapReduceAsync(scheduler, collection, mr, successful(scheduler, initialValue));
+    public static <I, O> AsyncResult<O> flatMapReduce(final TaskScheduler scheduler,
+                                                      final Iterator<? extends I> collection,
+                                                      final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
+                                                      final O initialValue) {
+        return flatMapReduce(scheduler, collection, mr, successful(scheduler, initialValue));
     }
 
     /**
@@ -213,8 +256,8 @@ public final class AsyncUtils {
      * @param <O> The type of the reduction result.
      * @return The result of the reduction.
      */
-    public static <I1, I2, O> AsyncResult<O> reduceAsync(final AsyncResult<I1> value1, final AsyncResult<I2> value2,
-                                                         final BiFunction<? super I1, ? super I2, AsyncResult<O>> accumulator){
+    public static <I1, I2, O> AsyncResult<O> flatReduce(final AsyncResult<I1> value1, final AsyncResult<I2> value2,
+                                                        final BiFunction<? super I1, ? super I2, AsyncResult<O>> accumulator){
         return value1.then((I1 v1) -> value2.then((I2 v2) -> accumulator.apply(v1, v2)));
     }
 
@@ -222,9 +265,12 @@ public final class AsyncUtils {
                                         final Iterator<AsyncResult<I>> values,
                                         final ThrowableFunction<? super Collection<I>, O> acc,
                                         final Callable<Collection<I>> initialVector){
-        return mapReduceAsync(scheduler,
+        return flatMapReduce(scheduler,
                 values,
-                (AsyncResult<I> result, Collection<I> collection) -> result.then((I elem) -> { collection.add(elem); return collection; }),
+                (AsyncResult<I> result, Collection<I> collection) -> result.then((I elem) -> {
+                    collection.add(elem);
+                    return collection;
+                }),
                 scheduler.submit(initialVector)).
                 then(acc);
     }
@@ -247,11 +293,11 @@ public final class AsyncUtils {
                 Vector::new);
     }
 
-    static <I, O> AsyncResult<O> reduceAsync(final TaskScheduler scheduler,
-                                                    final Iterator<AsyncResult<I>> values,
-                                                    final Function<? super Collection<I>, AsyncResult<O>> reducer,
-                                                    final Callable<Collection<I>> initialVector) {
-        return mapReduceAsync(scheduler,
+    static <I, O> AsyncResult<O> flatReduce(final TaskScheduler scheduler,
+                                            final Iterator<AsyncResult<I>> values,
+                                            final Function<? super Collection<I>, AsyncResult<O>> reducer,
+                                            final Callable<Collection<I>> initialVector) {
+        return flatMapReduce(scheduler,
                 values,
                 (AsyncResult<I> result, Collection<I> collection) -> values.next().then((I elem) -> {
                     collection.add(elem);
@@ -270,10 +316,10 @@ public final class AsyncUtils {
      * @param <O> Type of the reduction result.
      * @return The result of the reduction.
      */
-    public static <I, O> AsyncResult<O> reduceAsync(final TaskScheduler scheduler,
-                                               final Iterator<AsyncResult<I>> values,
-                                               final Function<? super Collection<I>, AsyncResult<O>> accumulator) {
-        return reduceAsync(scheduler, values, accumulator,
+    public static <I, O> AsyncResult<O> flatReduce(final TaskScheduler scheduler,
+                                                   final Iterator<AsyncResult<I>> values,
+                                                   final Function<? super Collection<I>, AsyncResult<O>> accumulator) {
+        return flatReduce(scheduler, values, accumulator,
                 Vector::new);
     }
 
@@ -289,9 +335,9 @@ public final class AsyncUtils {
      * @param <I> Type of the looping state.
      * @return The object that represents asynchronous state of the asynchronous looping.
      */
-    public static <I> AsyncResult<I> untilAsync(final TaskScheduler scheduler,
-                                                final Function<? super I, AsyncResult<Boolean>> predicate,
-                                                final AsyncResult<I> initialState) {
+    public static <I> AsyncResult<I> flatUntil(final TaskScheduler scheduler,
+                                               final Function<? super I, AsyncResult<Boolean>> predicate,
+                                               final AsyncResult<I> initialState) {
         return initialState.then(new Function<I, AsyncResult<I>>() {
             @Override
             public AsyncResult<I> apply(final I current) {
@@ -315,10 +361,10 @@ public final class AsyncUtils {
      * @param <I> Type of the looping state.
      * @return The object that represents asynchronous state of the asynchronous looping.
      */
-    public static <I> AsyncResult<I> untilAsync(final TaskScheduler scheduler,
-                                                final Function<? super I, AsyncResult<Boolean>> predicate,
-                                                final I initialState) {
-        return untilAsync(scheduler, predicate, successful(scheduler, initialState));
+    public static <I> AsyncResult<I> flatUntil(final TaskScheduler scheduler,
+                                               final Function<? super I, AsyncResult<Boolean>> predicate,
+                                               final I initialState) {
+        return flatUntil(scheduler, predicate, successful(scheduler, initialState));
     }
 
     /**
