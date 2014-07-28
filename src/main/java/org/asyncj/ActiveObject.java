@@ -327,16 +327,16 @@ public abstract class ActiveObject {
      * @param <O>          Type of the reduced result.
      * @return An object that represents asynchronous result of the map-reduce algorithm.
      */
-    protected final <I, O> AsyncResult<O> mapReduceAsync(final Iterator<? extends I> collection,
-                                                         final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
-                                                         final AsyncResult<O> initialValue) {
-        return AsyncUtils.mapReduceAsync(scheduler, collection, mr, initialValue);
+    protected final <I, O> AsyncResult<O> flatMapReduce(final Iterator<? extends I> collection,
+                                                        final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
+                                                        final AsyncResult<O> initialValue) {
+        return AsyncUtils.flatMapReduce(scheduler, collection, mr, initialValue);
     }
 
     /**
      * Iterates over collection and performs filtering and summary operation.
      * <p>
-     * Call {@link #mapReduceAsync(java.util.Iterator, java.util.function.BiFunction, Object, Enum)} instead of this method
+     * Call {@link #flatMapReduce(java.util.Iterator, java.util.function.BiFunction, Object, Enum)} instead of this method
      * if this active object use priority-based task scheduler.
      * </p>
      *
@@ -347,16 +347,16 @@ public abstract class ActiveObject {
      * @param <O>          Type of the reduced result.
      * @return An object that represents asynchronous result of the map-reduce algorithm.
      */
-    protected final <I, O> AsyncResult<O> mapReduceAsync(final Iterator<? extends I> collection,
-                                                         final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
-                                                         final O initialValue) {
-        return AsyncUtils.mapReduceAsync(scheduler, collection, mr, initialValue);
+    protected final <I, O> AsyncResult<O> flatMapReduce(final Iterator<? extends I> collection,
+                                                        final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
+                                                        final O initialValue) {
+        return AsyncUtils.flatMapReduce(scheduler, collection, mr, initialValue);
     }
 
     /**
      * Iterates over collection and performs filtering and summary operation.
      * <p>
-     * Call {@link #mapReduceAsync(java.util.Iterator, java.util.function.BiFunction, Object)} instead of this method
+     * Call {@link #flatMapReduce(java.util.Iterator, java.util.function.BiFunction, Object)} instead of this method
      * if this active object don't use priority-based task scheduler.
      * </p>
      *
@@ -369,11 +369,11 @@ public abstract class ActiveObject {
      * @param <P>          Type of the enum that represents all available priorities.
      * @return An object that represents asynchronous result of the map-reduce algorithm.
      */
-    protected final <I, O, P extends Enum<P> & IntSupplier> AsyncResult<O> mapReduceAsync(final Iterator<? extends I> collection,
-                                                                                          final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
-                                                                                          final O initialValue,
-                                                                                          final P priority) {
-        return AsyncUtils.mapReduceAsync(scheduler, collection, mr, prioritizeScalar(initialValue, priority));
+    protected final <I, O, P extends Enum<P> & IntSupplier> AsyncResult<O> flatMapReduce(final Iterator<? extends I> collection,
+                                                                                         final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
+                                                                                         final O initialValue,
+                                                                                         final P priority) {
+        return AsyncUtils.flatMapReduce(scheduler, collection, mr, prioritizeScalar(initialValue, priority));
     }
 
     /**
@@ -419,9 +419,9 @@ public abstract class ActiveObject {
      * @param <O>         Type of the reduction result.
      * @return The result of the reduction.
      */
-    protected final <I, O> AsyncResult<O> reduceAsync(final Iterator<AsyncResult<I>> values,
-                                                      final Function<? super Collection<I>, AsyncResult<O>> accumulator) {
-        return AsyncUtils.reduceAsync(scheduler, values, accumulator);
+    protected final <I, O> AsyncResult<O> flatReduce(final Iterator<AsyncResult<I>> values,
+                                                     final Function<? super Collection<I>, AsyncResult<O>> accumulator) {
+        return AsyncUtils.flatReduce(scheduler, values, accumulator);
     }
 
     /**
@@ -435,10 +435,10 @@ public abstract class ActiveObject {
      * @param <P>         Type of the enum that represents all available priorities.
      * @return The result of the reduction.
      */
-    protected final <I, O, P extends Enum<P> & IntSupplier> AsyncResult<O> reduceAsync(final Iterator<AsyncResult<I>> values,
-                                                                                       final Function<? super Collection<I>, AsyncResult<O>> accumulator,
-                                                                                       final P priority) {
-        return AsyncUtils.reduceAsync(scheduler, values, accumulator,
+    protected final <I, O, P extends Enum<P> & IntSupplier> AsyncResult<O> flatReduce(final Iterator<AsyncResult<I>> values,
+                                                                                      final Function<? super Collection<I>, AsyncResult<O>> accumulator,
+                                                                                      final P priority) {
+        return AsyncUtils.flatReduce(scheduler, values, accumulator,
                 AsyncUtils.<Collection<I>, P>prioritize(Vector::new, priority));
     }
 
@@ -561,9 +561,9 @@ public abstract class ActiveObject {
      * @param <I> Type of the looping state.
      * @return The object that represents asynchronous state of the asynchronous looping.
      */
-    protected final <I> AsyncResult<I> untilAsync(final Function<I, AsyncResult<Boolean>> predicate,
-                                                final AsyncResult<I> initialState) {
-        return AsyncUtils.untilAsync(scheduler, predicate, initialState);
+    protected final <I> AsyncResult<I> flatUntil(final Function<I, AsyncResult<Boolean>> predicate,
+                                                 final AsyncResult<I> initialState) {
+        return AsyncUtils.flatUntil(scheduler, predicate, initialState);
     }
 
     /**
@@ -577,9 +577,9 @@ public abstract class ActiveObject {
      * @param <I> Type of the looping state.
      * @return The object that represents asynchronous state of the asynchronous looping.
      */
-    protected final <I> AsyncResult<I> untilAsync(final Function<I, AsyncResult<Boolean>> predicate,
-                                                final I initialState) {
-        return AsyncUtils.untilAsync(scheduler, predicate, initialState);
+    protected final <I> AsyncResult<I> flatUntil(final Function<I, AsyncResult<Boolean>> predicate,
+                                                 final I initialState) {
+        return AsyncUtils.flatUntil(scheduler, predicate, initialState);
     }
 
     /**
@@ -593,9 +593,9 @@ public abstract class ActiveObject {
      * @param <I> Type of the looping state.
      * @return The object that represents asynchronous state of the asynchronous looping.
      */
-    protected final <I, P extends Enum<P> & IntSupplier> AsyncResult<I> untilAsync(final Function<I, AsyncResult<Boolean>> predicate,
-                                                  final I initialState,
-                                                  final P priority) {
-        return untilAsync(predicate, prioritizeScalar(initialState, priority));
+    protected final <I, P extends Enum<P> & IntSupplier> AsyncResult<I> flatUntil(final Function<I, AsyncResult<Boolean>> predicate,
+                                                                                  final I initialState,
+                                                                                  final P priority) {
+        return flatUntil(predicate, prioritizeScalar(initialState, priority));
     }
 }
