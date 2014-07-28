@@ -173,9 +173,9 @@ public final class ActiveObjectTest extends Assert {
     }
 
     @Test
-    public void asyncMapReduceTest() throws InterruptedException, ExecutionException, TimeoutException{
+    public void flatMapReduceTest() throws InterruptedException, ExecutionException, TimeoutException{
         final Integer[] array = new Integer[]{1, 2, 3, 4, 5, 6 ,7 ,8 , 9, 10};
-        final AsyncResult<String> result = AsyncUtils.mapReduceAsync(AsyncUtils.getGlobalScheduler(),
+        final AsyncResult<String> result = AsyncUtils.flatMapReduce(AsyncUtils.getGlobalScheduler(),
                 Arrays.asList(array).iterator(),
                 (input, output) -> AsyncUtils.successful(AsyncUtils.getGlobalScheduler(), output + input),
                 "");
