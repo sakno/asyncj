@@ -7,6 +7,7 @@ import java.util.Iterator;
 import java.util.Objects;
 import java.util.Vector;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ThreadFactory;
 import java.util.function.*;
 
@@ -98,6 +99,10 @@ public final class AsyncUtils {
             throw errorFactory.get();
         };
         return scheduler.submit(task);
+    }
+
+    public static <V> AsyncResult<V> cancellation(final TaskScheduler scheduler) {
+        return failure(scheduler, CancellationException::new);
     }
 
     /**
