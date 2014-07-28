@@ -553,12 +553,13 @@ public abstract class ActiveObject {
     /**
      * Executes asynchronous version of while-do loop.
      * <p>
-     *     The loop iterations are sequential in time but not blocks the task scheduler thread.
-     *     This version of while-do loop supports iteration with asynchronous result.
+     * The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * This version of while-do loop supports iteration with asynchronous result.
      * </p>
-     * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     *
+     * @param predicate    Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
      * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
-     * @param <I> Type of the looping state.
+     * @param <I>          Type of the looping state.
      * @return The object that represents asynchronous state of the asynchronous looping.
      */
     protected final <I> AsyncResult<I> flatUntil(final Function<I, AsyncResult<Boolean>> predicate,
@@ -569,12 +570,13 @@ public abstract class ActiveObject {
     /**
      * Executes asynchronous version of while-do loop.
      * <p>
-     *     The loop iterations are sequential in time but not blocks the task scheduler thread.
-     *     This version of while-do loop supports iteration with asynchronous result.
+     * The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * This version of while-do loop supports iteration with asynchronous result.
      * </p>
-     * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     *
+     * @param predicate    Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
      * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
-     * @param <I> Type of the looping state.
+     * @param <I>          Type of the looping state.
      * @return The object that represents asynchronous state of the asynchronous looping.
      */
     protected final <I> AsyncResult<I> flatUntil(final Function<I, AsyncResult<Boolean>> predicate,
@@ -585,17 +587,54 @@ public abstract class ActiveObject {
     /**
      * Executes asynchronous version of while-do loop.
      * <p>
-     *     The loop iterations are sequential in time but not blocks the task scheduler thread.
-     *     This version of while-do loop supports iteration with asynchronous result.
+     * The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * This version of while-do loop supports iteration with asynchronous result.
      * </p>
-     * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     *
+     * @param predicate    Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
      * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
-     * @param <I> Type of the looping state.
+     * @param <I>          Type of the looping state.
      * @return The object that represents asynchronous state of the asynchronous looping.
      */
     protected final <I, P extends Enum<P> & IntSupplier> AsyncResult<I> flatUntil(final Function<I, AsyncResult<Boolean>> predicate,
                                                                                   final I initialState,
                                                                                   final P priority) {
         return flatUntil(predicate, prioritizeScalar(initialState, priority));
+    }
+
+    /**
+     * Transforms a set of asynchronous result into the asynchronous set of results.
+     *
+     * @param values The iterator to transform. Cannot be {@literal null}.
+     * @param <T>    Type of the collection elements.
+     * @return Asynchronous collection.
+     */
+    protected final <T> AsyncResult<Iterable<T>> sequence(final Iterable<AsyncResult<T>> values) {
+        return AsyncUtils.sequence(scheduler, values);
+    }
+
+    /**
+     * Transforms a set of asynchronous result into the asynchronous set of results.
+     *
+     * @param values   The iterator to transform. Cannot be {@literal null}.
+     * @param priority The priority of this request.
+     * @param <T>      Type of the collection elements.
+     * @param <P>      Type of the priority descriptor.
+     * @return Asynchronous collection.
+     */
+    protected final <T, P extends Enum<P> & IntSupplier> AsyncResult<Iterable<T>> sequence(final Iterable<AsyncResult<T>> values, final P priority) {
+        return AsyncUtils.sequence(scheduler, values, AsyncUtils.prioritize(Vector::new, priority));
+    }
+
+    /**
+     * Transforms a set of asynchronous result into the asynchronous set of results.
+     *
+     * @param values An array to transform.
+     * @param <T>    Type of the collection elements.
+     * @return Asynchronous collection.
+     */
+    @SafeVarargs
+    protected final <T> AsyncResult<Iterable<T>> sequence(final AsyncResult<T>... values) {
+        return AsyncUtils.sequence(scheduler, values);
     }
 }

@@ -2,13 +2,8 @@ package org.asyncj;
 
 import org.asyncj.impl.TaskExecutor;
 
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.Objects;
-import java.util.Vector;
-import java.util.concurrent.Callable;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.ThreadFactory;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.function.*;
 
 /**
@@ -49,6 +44,40 @@ public final class AsyncUtils {
         @Override
         public int getAsInt() {
             return priority.getAsInt();
+        }
+    }
+
+    private static final class TaskGroupSynchronizer<T> extends CountDownLatch implements AsyncCallback<T>{
+        private final Collection<T> results;
+        private volatile Exception error;
+
+        public TaskGroupSynchronizer(final int taskCount){
+            super(taskCount);
+            results = new Vector<>(taskCount);
+        }
+
+        /**
+         * Informs this object that the asynchronous computation is completed.
+         *
+         * @param input The result of the asynchronous computation.
+         * @param error The error occurred during asynchronous computation.
+         */
+        @Override
+        public final void invoke(final T input, final Exception error) {
+            if(error != null && this.error == null) {
+                this.error = error;
+                while (getCount() > 0)
+                    countDown();
+            }
+            else {
+                results.add(input);
+                countDown();
+            }
+        }
+
+        final Collection<T> getResult() throws ExecutionException{
+            if(error != null) throw new ExecutionException(error);
+            else return results;
         }
     }
 
@@ -293,9 +322,19 @@ public final class AsyncUtils {
                 Vector::new);
     }
 
-    static <I, O> AsyncResult<O> flatReduce(final TaskScheduler scheduler,
+    /**
+     * Reduces the specified collection.
+     * @param scheduler The scheduler used to submit reduce operation. Cannot be {@literal null}.
+     * @param values An iterator over collection to reduce. Cannot be {@literal null}.
+     * @param accumulator Associative, non-interfering and stateless function for combining two values. Cannot be {@literal null}.
+     * @param initialVector The initial collection initializer.
+     * @param <I> Type of the elements in the input collection.
+     * @param <O> Type of the reduction result.
+     * @return The result of the reduction.
+     */
+    public static <I, O> AsyncResult<O> flatReduce(final TaskScheduler scheduler,
                                             final Iterator<AsyncResult<I>> values,
-                                            final Function<? super Collection<I>, AsyncResult<O>> reducer,
+                                            final Function<? super Collection<I>, AsyncResult<O>> accumulator,
                                             final Callable<Collection<I>> initialVector) {
         return flatMapReduce(scheduler,
                 values,
@@ -304,7 +343,7 @@ public final class AsyncUtils {
                     return collection;
                 }),
                 scheduler.submit(initialVector)).
-                then(reducer);
+                then(accumulator);
     }
 
     /**
@@ -499,4 +538,125 @@ public final class AsyncUtils {
     public static <V, P extends Enum<P> & IntSupplier> Callable<V> prioritize(final Callable<V> task, final P priority){
         return new PriorityCallable<>(task, priority);
     }
+
+    /**
+     * Blocks the current thread and obtain the result of all specified asynchronous computations.
+     * @param results The asynchronous computations to be synchronized.
+     * @param <T> Subtype of all asynchronous computation results.
+     * @return A collection of asynchronous computation results.
+     * @throws ExecutionException One of the specified tasks throws an exception during computation.
+     * @throws InterruptedException The awaitor thread is interrupted.
+     */
+    public static <T> Collection<T> getAll(final Collection<AsyncResult<? extends T>> results) throws ExecutionException, InterruptedException {
+        final TaskGroupSynchronizer<T> synchronizer = new TaskGroupSynchronizer<>(Objects.requireNonNull(results, "results is null.").size());
+        results.forEach(ar -> ar.onCompleted(synchronizer));
+        synchronizer.await();
+        return synchronizer.getResult();
+    }
+
+    /**
+     * Blocks the current thread and obtain the result of all specified asynchronous computations.
+     * @param results The asynchronous computations to be synchronized.
+     * @param timeout Timeout to wait.
+     * @param unit Timeout measurement unit.
+     * @param <T> Subtype of all asynchronous computation results.
+     * @return A collection of asynchronous computation results.
+     * @throws ExecutionException One of the specified tasks throws an exception during computation.
+     * @throws InterruptedException The awaitor thread is interrupted.
+     * @throws java.util.concurrent.TimeoutException Awaiting is timed out.
+     */
+    public static <T> Collection<T> getAll(final Collection<AsyncResult<? extends T>> results, final long timeout, final TimeUnit unit) throws ExecutionException, InterruptedException, TimeoutException {
+        final TaskGroupSynchronizer<T> synchronizer = new TaskGroupSynchronizer<>(Objects.requireNonNull(results, "results is null.").size());
+        results.forEach(ar -> ar.onCompleted(synchronizer));
+        if (!synchronizer.await(timeout, unit))
+            throw new TimeoutException();
+        return synchronizer.getResult();
+    }
+
+    /**
+     * Blocks the current thread and obtain the result of all specified asynchronous computations.
+     * @param results The asynchronous computations to be synchronized.
+     * @param <T> Subtype of all asynchronous computation results.
+     * @return A collection of asynchronous computation results.
+     * @throws ExecutionException One of the specified tasks throws an exception during computation.
+     * @throws InterruptedException The awaitor thread is interrupted.
+     */
+    public static <T> Collection<T> getAll(final AsyncResult<? extends T>... results) throws ExecutionException, InterruptedException {
+        return getAll(Arrays.asList(results));
+    }
+
+    /**
+     * Blocks the current thread and obtain the result of all specified asynchronous computations.
+     * @param results The asynchronous computations to be synchronized.
+     * @param timeout Timeout to wait.
+     * @param unit Timeout measurement unit.
+     * @param <T> Subtype of all asynchronous computation results.
+     * @return A collection of asynchronous computation results.
+     * @throws ExecutionException One of the specified tasks throws an exception during computation.
+     * @throws InterruptedException The awaitor thread is interrupted.
+     * @throws java.util.concurrent.TimeoutException Awaiting is timed out.
+     */
+    public static <T> Collection<T> getAll(final AsyncResult<? extends T>[] results, final long timeout, final TimeUnit unit) throws ExecutionException, InterruptedException, TimeoutException {
+        return getAll(Arrays.asList(results), timeout, unit);
+    }
+
+    /**
+     * Provides lower cast between asynchronous results.
+     * @param ar The result to cast. Cannot be {@literal null}.
+     * @param <I> The type of the result to cast.
+     * @param <O> Lower-bound cast.
+     * @return Asynchronous lower-bound cast.
+     */
+    public static <I extends O, O> AsyncResult<O> cast(final AsyncResult<I> ar) {
+        return Objects.requireNonNull(ar, "ar is null.")
+                .then(ThrowableFunction.<I>identity());
+    }
+
+    /**
+     * Transforms a set of asynchronous result into the asynchronous set of results.
+     * @param scheduler The scheduler used to submit temporary tasks. Cannot be {@literal null}.
+     * @param values The iterator to transform. Cannot be {@literal null}.
+     * @param initialVector Initial vector initializer.
+     * @param <T> Type of the collection elements.
+     * @return Asynchronous collection.
+     */
+    public static <T> AsyncResult<Iterable<T>> sequence(final TaskScheduler scheduler,
+                                                 final Iterable<AsyncResult<T>> values,
+                                                 final Callable<Collection<T>> initialVector){
+        return cast(flatMapReduce(scheduler,
+                values.iterator(),
+                (AsyncResult<T> result, Collection<T> collection) -> result.then((T elem) -> {
+                    collection.add(elem);
+                    return collection;
+                }),
+                scheduler.submit(initialVector)));
+    }
+
+    /**
+     * Transforms a set of asynchronous result into the asynchronous set of results.
+     * @param scheduler The scheduler used to submit temporary tasks. Cannot be {@literal null}.
+     * @param values The iterator to transform. Cannot be {@literal null}.
+     * @param <T> Type of the collection elements.
+     * @return Asynchronous collection.
+     */
+    public static <T> AsyncResult<Iterable<T>> sequence(final TaskScheduler scheduler,
+                                           final Iterable<AsyncResult<T>> values) {
+        return sequence(scheduler,
+                values,
+                Vector::new);
+    }
+
+    /**
+     * Transforms a set of asynchronous result into the asynchronous set of results.
+     * @param scheduler The scheduler used to submit temporary tasks. Cannot be {@literal null}.
+     * @param values An array to transform.
+     * @param <T> Type of the collection elements.
+     * @return Asynchronous collection.
+     */
+    public static <T> AsyncResult<Iterable<T>> sequence(final TaskScheduler scheduler,
+                                                        final AsyncResult<T>... values){
+        return sequence(scheduler, Arrays.asList(values));
+    }
+
+
 }
