@@ -69,11 +69,6 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
      */
     protected abstract void run(final I result, final Exception err);
 
-    private void atomicRun(final I result, final Exception err) {
-        if(compareAndSetState(PENDING_STATE, WRAPPED_STATE))
-            run(result, err);
-    }
-
     protected final void complete(final O value){
         complete(AsyncUtils.successful(scheduler, value));
     }
@@ -88,8 +83,8 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
                     return;
             }
         } while (preventTransition || !compareAndSetState(currentState, WRAPPED_STATE));
-        releaseShared(0);
         underlyingTask = ar;
+        releaseShared(0);
     }
 
     protected final void failure(final Exception err){
@@ -102,7 +97,7 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
      */
     @Override
     public final void run() {
-        parent.onCompleted(this::atomicRun);
+        parent.onCompleted(this::run);
     }
 
     /**
@@ -216,13 +211,14 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
     }
 
     private O get(final long nanos) throws InterruptedException, ExecutionException, TimeoutException {
+        final Instant now = Instant.now();
+        if (!tryAcquireSharedNanos(0, nanos))
+            throw new TimeoutException();
         switch (getState()) {
             case CANCELLED_STATE:
                 throw new CancellationException();
             case WRAPPED_STATE:
-                final Instant now = Instant.now();
-                tryAcquireSharedNanos(0, nanos);
-                final Duration timeout = Duration.between(now, Instant.now());
+                final Duration timeout = Duration.ofNanos(nanos).minus(Duration.between(now, Instant.now()));
                 if (!timeout.isNegative())
                     return underlyingTask.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
             default:

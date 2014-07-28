@@ -60,3 +60,4 @@ requirements you can choose the following alternatives:
 * [async4j](https://github.com/amah/async) - asynchronous programming library that provides a set of callback based constructs
 * [promise4j](https://github.com/tehsenaus/promise4j) - completely type-safe implementation of Promises for Java
 * [Akka](http://akka.io) - building scalable applications using actors and agents
+* [JavaAsync](http://www.playframework.com/documentation/2.0/JavaAsync) as a part of Play! Framework

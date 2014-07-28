@@ -327,16 +327,16 @@ public abstract class ActiveObject {
      * @param <O>          Type of the reduced result.
      * @return An object that represents asynchronous result of the map-reduce algorithm.
      */
-    protected final <I, O> AsyncResult<O> mapReduceAsync(final Iterator<? extends I> collection,
-                                                         final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
-                                                         final AsyncResult<O> initialValue) {
-        return AsyncUtils.mapReduceAsync(scheduler, collection, mr, initialValue);
+    protected final <I, O> AsyncResult<O> flatMapReduce(final Iterator<? extends I> collection,
+                                                        final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
+                                                        final AsyncResult<O> initialValue) {
+        return AsyncUtils.flatMapReduce(scheduler, collection, mr, initialValue);
     }
 
     /**
      * Iterates over collection and performs filtering and summary operation.
      * <p>
-     * Call {@link #mapReduceAsync(java.util.Iterator, java.util.function.BiFunction, Object, Enum)} instead of this method
+     * Call {@link #flatMapReduce(java.util.Iterator, java.util.function.BiFunction, Object, Enum)} instead of this method
      * if this active object use priority-based task scheduler.
      * </p>
      *
@@ -347,16 +347,16 @@ public abstract class ActiveObject {
      * @param <O>          Type of the reduced result.
      * @return An object that represents asynchronous result of the map-reduce algorithm.
      */
-    protected final <I, O> AsyncResult<O> mapReduceAsync(final Iterator<? extends I> collection,
-                                                         final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
-                                                         final O initialValue) {
-        return AsyncUtils.mapReduceAsync(scheduler, collection, mr, initialValue);
+    protected final <I, O> AsyncResult<O> flatMapReduce(final Iterator<? extends I> collection,
+                                                        final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
+                                                        final O initialValue) {
+        return AsyncUtils.flatMapReduce(scheduler, collection, mr, initialValue);
     }
 
     /**
      * Iterates over collection and performs filtering and summary operation.
      * <p>
-     * Call {@link #mapReduceAsync(java.util.Iterator, java.util.function.BiFunction, Object)} instead of this method
+     * Call {@link #flatMapReduce(java.util.Iterator, java.util.function.BiFunction, Object)} instead of this method
      * if this active object don't use priority-based task scheduler.
      * </p>
      *
@@ -369,11 +369,11 @@ public abstract class ActiveObject {
      * @param <P>          Type of the enum that represents all available priorities.
      * @return An object that represents asynchronous result of the map-reduce algorithm.
      */
-    protected final <I, O, P extends Enum<P> & IntSupplier> AsyncResult<O> mapReduceAsync(final Iterator<? extends I> collection,
-                                                                                          final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
-                                                                                          final O initialValue,
-                                                                                          final P priority) {
-        return AsyncUtils.mapReduceAsync(scheduler, collection, mr, prioritizeScalar(initialValue, priority));
+    protected final <I, O, P extends Enum<P> & IntSupplier> AsyncResult<O> flatMapReduce(final Iterator<? extends I> collection,
+                                                                                         final BiFunction<? super I, ? super O, AsyncResult<O>> mr,
+                                                                                         final O initialValue,
+                                                                                         final P priority) {
+        return AsyncUtils.flatMapReduce(scheduler, collection, mr, prioritizeScalar(initialValue, priority));
     }
 
     /**
@@ -419,9 +419,9 @@ public abstract class ActiveObject {
      * @param <O>         Type of the reduction result.
      * @return The result of the reduction.
      */
-    protected final <I, O> AsyncResult<O> reduceAsync(final Iterator<AsyncResult<I>> values,
-                                                      final Function<? super Collection<I>, AsyncResult<O>> accumulator) {
-        return AsyncUtils.reduceAsync(scheduler, values, accumulator);
+    protected final <I, O> AsyncResult<O> flatReduce(final Iterator<AsyncResult<I>> values,
+                                                     final Function<? super Collection<I>, AsyncResult<O>> accumulator) {
+        return AsyncUtils.flatReduce(scheduler, values, accumulator);
     }
 
     /**
@@ -435,10 +435,10 @@ public abstract class ActiveObject {
      * @param <P>         Type of the enum that represents all available priorities.
      * @return The result of the reduction.
      */
-    protected final <I, O, P extends Enum<P> & IntSupplier> AsyncResult<O> reduceAsync(final Iterator<AsyncResult<I>> values,
-                                                                                       final Function<? super Collection<I>, AsyncResult<O>> accumulator,
-                                                                                       final P priority) {
-        return AsyncUtils.reduceAsync(scheduler, values, accumulator,
+    protected final <I, O, P extends Enum<P> & IntSupplier> AsyncResult<O> flatReduce(final Iterator<AsyncResult<I>> values,
+                                                                                      final Function<? super Collection<I>, AsyncResult<O>> accumulator,
+                                                                                      final P priority) {
+        return AsyncUtils.flatReduce(scheduler, values, accumulator,
                 AsyncUtils.<Collection<I>, P>prioritize(Vector::new, priority));
     }
 
@@ -553,49 +553,88 @@ public abstract class ActiveObject {
     /**
      * Executes asynchronous version of while-do loop.
      * <p>
-     *     The loop iterations are sequential in time but not blocks the task scheduler thread.
-     *     This version of while-do loop supports iteration with asynchronous result.
+     * The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * This version of while-do loop supports iteration with asynchronous result.
      * </p>
-     * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     *
+     * @param predicate    Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
      * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
-     * @param <I> Type of the looping state.
+     * @param <I>          Type of the looping state.
      * @return The object that represents asynchronous state of the asynchronous looping.
      */
-    protected final <I> AsyncResult<I> untilAsync(final Function<I, AsyncResult<Boolean>> predicate,
-                                                final AsyncResult<I> initialState) {
-        return AsyncUtils.untilAsync(scheduler, predicate, initialState);
+    protected final <I> AsyncResult<I> flatUntil(final Function<I, AsyncResult<Boolean>> predicate,
+                                                 final AsyncResult<I> initialState) {
+        return AsyncUtils.flatUntil(scheduler, predicate, initialState);
     }
 
     /**
      * Executes asynchronous version of while-do loop.
      * <p>
-     *     The loop iterations are sequential in time but not blocks the task scheduler thread.
-     *     This version of while-do loop supports iteration with asynchronous result.
+     * The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * This version of while-do loop supports iteration with asynchronous result.
      * </p>
-     * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     *
+     * @param predicate    Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
      * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
-     * @param <I> Type of the looping state.
+     * @param <I>          Type of the looping state.
      * @return The object that represents asynchronous state of the asynchronous looping.
      */
-    protected final <I> AsyncResult<I> untilAsync(final Function<I, AsyncResult<Boolean>> predicate,
-                                                final I initialState) {
-        return AsyncUtils.untilAsync(scheduler, predicate, initialState);
+    protected final <I> AsyncResult<I> flatUntil(final Function<I, AsyncResult<Boolean>> predicate,
+                                                 final I initialState) {
+        return AsyncUtils.flatUntil(scheduler, predicate, initialState);
     }
 
     /**
      * Executes asynchronous version of while-do loop.
      * <p>
-     *     The loop iterations are sequential in time but not blocks the task scheduler thread.
-     *     This version of while-do loop supports iteration with asynchronous result.
+     * The loop iterations are sequential in time but not blocks the task scheduler thread.
+     * This version of while-do loop supports iteration with asynchronous result.
      * </p>
-     * @param predicate Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
+     *
+     * @param predicate    Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
      * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
-     * @param <I> Type of the looping state.
+     * @param <I>          Type of the looping state.
      * @return The object that represents asynchronous state of the asynchronous looping.
      */
-    protected final <I, P extends Enum<P> & IntSupplier> AsyncResult<I> untilAsync(final Function<I, AsyncResult<Boolean>> predicate,
-                                                  final I initialState,
-                                                  final P priority) {
-        return untilAsync(predicate, prioritizeScalar(initialState, priority));
+    protected final <I, P extends Enum<P> & IntSupplier> AsyncResult<I> flatUntil(final Function<I, AsyncResult<Boolean>> predicate,
+                                                                                  final I initialState,
+                                                                                  final P priority) {
+        return flatUntil(predicate, prioritizeScalar(initialState, priority));
+    }
+
+    /**
+     * Transforms a set of asynchronous result into the asynchronous set of results.
+     *
+     * @param values The iterator to transform. Cannot be {@literal null}.
+     * @param <T>    Type of the collection elements.
+     * @return Asynchronous collection.
+     */
+    protected final <T> AsyncResult<Iterable<T>> sequence(final Iterable<AsyncResult<T>> values) {
+        return AsyncUtils.sequence(scheduler, values);
+    }
+
+    /**
+     * Transforms a set of asynchronous result into the asynchronous set of results.
+     *
+     * @param values   The iterator to transform. Cannot be {@literal null}.
+     * @param priority The priority of this request.
+     * @param <T>      Type of the collection elements.
+     * @param <P>      Type of the priority descriptor.
+     * @return Asynchronous collection.
+     */
+    protected final <T, P extends Enum<P> & IntSupplier> AsyncResult<Iterable<T>> sequence(final Iterable<AsyncResult<T>> values, final P priority) {
+        return AsyncUtils.sequence(scheduler, values, AsyncUtils.prioritize(Vector::new, priority));
+    }
+
+    /**
+     * Transforms a set of asynchronous result into the asynchronous set of results.
+     *
+     * @param values An array to transform.
+     * @param <T>    Type of the collection elements.
+     * @return Asynchronous collection.
+     */
+    @SafeVarargs
+    protected final <T> AsyncResult<Iterable<T>> sequence(final AsyncResult<T>... values) {
+        return AsyncUtils.sequence(scheduler, values);
     }
 }
