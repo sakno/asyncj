@@ -8,6 +8,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.IntFunction;
+import java.util.function.ToIntFunction;
 
 /**
  * Represents asynchronously executing task.
@@ -177,9 +179,13 @@ public abstract class Task<V> extends AbstractQueuedSynchronizer implements Asyn
         return (getState() & FINAL_STATE) != 0;
     }
 
-    private static <V> V prepareResult(final int currentState, final V result, final Exception error) throws ExecutionException {
+    private static <V> V prepareResult(final int currentState, final V result, final Exception error) throws ExecutionException, CancellationException {
         if (currentState == CANCELLED_STATE)
             throw new CancellationException();
+        else if (error instanceof CancellationException)
+            throw (CancellationException) error;
+        else if (error instanceof InterruptedException)
+            throw new CancellationException(error.getMessage());
         else if (error != null)
             throw new ExecutionException(error);
         else return result;
@@ -246,9 +252,15 @@ public abstract class Task<V> extends AbstractQueuedSynchronizer implements Asyn
     public final void run() {
         if (compareAndSetState(CREATED_STATE, EXECUTED_STATE))
             try {
-                setResult(call(), value -> this.result = value);
+                setResult(call(), value -> {
+                    this.result = value;
+                    return COMPLETED_STATE;
+                });
             } catch (final Exception e) {
-                setResult(e, value -> this.error = value);
+                setResult(e, value -> {
+                    this.error = value;
+                    return value instanceof CancellationException || value instanceof InterruptedException ? CANCELLED_STATE : COMPLETED_STATE;
+                });
             }
     }
 
@@ -258,16 +270,17 @@ public abstract class Task<V> extends AbstractQueuedSynchronizer implements Asyn
      */
     private void done(final int finalState) {
         final Task nt = nextTask.getAndUpdate(t -> null); //help GC
-        switch (finalState) {
-            case CANCELLED_STATE:
-                nt.cancel(true);
-                return;
-            case COMPLETED_STATE:
-                scheduler.submit((Runnable) nt);
-        }
+        if (nt != null)
+            switch (finalState) {
+                case CANCELLED_STATE:
+                    nt.cancel(true);
+                    return;
+                case COMPLETED_STATE:
+                    scheduler.submit((Runnable) nt);
+            }
     }
 
-    private <T> void setResult(final T result, final Consumer<T> fieldChanger) {
+    private <T> void setResult(final T result, final ToIntFunction<T> fieldChanger) {
         int currentState;
         do {
             switch (currentState = getState()) {
@@ -278,9 +291,9 @@ public abstract class Task<V> extends AbstractQueuedSynchronizer implements Asyn
             }
         }
         while (preventTransition || !compareAndSetState(currentState, COMPLETED_STATE));
-        fieldChanger.accept(result);
+        final int finalState = fieldChanger.applyAsInt(result);
         releaseShared(0);
-        done(COMPLETED_STATE);
+        done(finalState);
     }
 
     /**
@@ -316,6 +329,8 @@ public abstract class Task<V> extends AbstractQueuedSynchronizer implements Asyn
                 case EXECUTED_STATE:
                 case CREATED_STATE:
                     return createAndAppendChildTask(task);
+                case CANCELLED_STATE:
+                    return AsyncUtils.cancellation(scheduler);
                 //never happens
                 default:
                     throw new IllegalStateException(String.format("Invalid task state %s", getAsyncState()));
