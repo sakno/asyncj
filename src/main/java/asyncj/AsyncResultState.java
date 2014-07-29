@@ -1,4 +1,4 @@
-package org.asyncj;
+package asyncj;
 
 /**
  * Represents state of the asynchronous task.

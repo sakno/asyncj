@@ -1,8 +1,8 @@
-package org.asyncj.impl;
+package asyncj.impl;
 
-import org.asyncj.AsyncUtils;
-import org.asyncj.PriorityTaskScheduler;
-import org.asyncj.TaskScheduler;
+import asyncj.AsyncUtils;
+import asyncj.PriorityTaskScheduler;
+import asyncj.TaskScheduler;
 
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;

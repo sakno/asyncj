@@ -1,4 +1,4 @@
-package org.asyncj;
+package asyncj;
 
 /**
  * Represents asynchronous callback that can be called by asynchronous task on its completion.

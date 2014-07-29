@@ -1,4 +1,4 @@
-package org.asyncj;
+package asyncj;
 
 import java.util.function.Function;
 

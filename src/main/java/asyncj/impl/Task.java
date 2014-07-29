@@ -1,14 +1,12 @@
-package org.asyncj.impl;
+package asyncj.impl;
 
-import org.asyncj.*;
+import asyncj.*;
 
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.AbstractQueuedSynchronizer;
-import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.IntFunction;
 import java.util.function.ToIntFunction;
 
 /**

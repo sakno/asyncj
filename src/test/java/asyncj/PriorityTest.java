@@ -1,6 +1,9 @@
-package org.asyncj;
+package asyncj;
 
-import org.asyncj.impl.PriorityTaskExecutor;
+import asyncj.AsyncResult;
+import asyncj.AsyncUtils;
+import asyncj.PriorityTaskScheduler;
+import asyncj.impl.PriorityTaskExecutor;
 import org.junit.Assert;
 import org.junit.Test;
 

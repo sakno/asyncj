@@ -1,6 +1,6 @@
-package org.asyncj.impl;
+package asyncj.impl;
 
-import org.asyncj.TaskScheduler;
+import asyncj.TaskScheduler;
 
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Represents simple task scheduler that represents bridge
- * between {@link java.util.concurrent.ExecutorService} and {@link org.asyncj.TaskScheduler}.
+ * between {@link java.util.concurrent.ExecutorService} and {@link asyncj.TaskScheduler}.
  * @author Roman Sakno
  * @version 1.0
  * @since 1.0
@@ -127,7 +127,7 @@ public final class TaskExecutor extends AbstractTaskScheduler {
     }
 
     /**
-     * Returns a {@link org.asyncj.impl.Task} for the given callable task.
+     * Returns a {@link Task} for the given callable task.
      *
      * @param callable the callable task being wrapped
      * @return a {@code RunnableFuture} which, when run, will call the

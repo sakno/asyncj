@@ -1,4 +1,4 @@
-package org.asyncj;
+package asyncj;
 
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;

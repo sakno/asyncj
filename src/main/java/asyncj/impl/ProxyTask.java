@@ -1,6 +1,6 @@
-package org.asyncj.impl;
+package asyncj.impl;
 
-import org.asyncj.*;
+import asyncj.*;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -61,7 +61,7 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
     /**
      * Informs this task about parent task completion.
      * <p>
-     *     It is allowed to use {@link #complete(org.asyncj.AsyncResult)} or {@link #failure(Exception)}
+     *     It is allowed to use {@link #complete(asyncj.AsyncResult)} or {@link #failure(Exception)}
      *     methods only inside of the overridden version of this method.
      * </p>
      * @param result The result of the parent task.

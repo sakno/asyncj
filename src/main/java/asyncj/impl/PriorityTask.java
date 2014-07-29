@@ -1,7 +1,7 @@
-package org.asyncj.impl;
+package asyncj.impl;
 
-import org.asyncj.PriorityTaskScheduler;
-import org.asyncj.TaskScheduler;
+import asyncj.PriorityTaskScheduler;
+import asyncj.TaskScheduler;
 
 import java.util.HashMap;
 import java.util.concurrent.Callable;

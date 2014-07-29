@@ -1,4 +1,4 @@
-package org.asyncj;
+package asyncj;
 
 import java.util.Collection;
 import java.util.Iterator;
@@ -17,8 +17,8 @@ import java.util.function.*;
  *     <ul>
  *         <li>Synchronous version of the method must be private or protected.</li>
  *         <li>For each synchronous method you should write two asynchronous methods: the first method
- *         provides {@link org.asyncj.AsyncResult} as a result, the second returns {@literal void} and
- *         accepts {@link org.asyncj.AsyncCallback} as the last parameter in the signature.</li>
+ *         provides {@link AsyncResult} as a result, the second returns {@literal void} and
+ *         accepts {@link AsyncCallback} as the last parameter in the signature.</li>
  *         <li>Implementation of these methods consist of wrapping an invocation of synchronous method into
  *         the asynchronous task using protected methods from {@code ActiveObject}.</li>
  *     </ul>
@@ -49,8 +49,8 @@ import java.util.function.*;
  * <p>
  *  If you want to enable priority-based task scheduling then you should do the following things:
  *  <ul>
- *      <li>Instantiate task scheduler which implements {@link org.asyncj.PriorityTaskScheduler} interface. The default
- *      implementation provided by {@link org.asyncj.impl.PriorityTaskExecutor}</li>
+ *      <li>Instantiate task scheduler which implements {@link PriorityTaskScheduler} interface. The default
+ *      implementation provided by {@link asyncj.impl.PriorityTaskExecutor}</li>
  *      <li>Use priority-based submit protected methods from {@code ActiveObject} (such as {@link #submit(java.util.concurrent.Callable, Enum)}
  *      or {@link #mapReduce(java.util.Iterator, java.util.function.BiFunction, Object, Enum)}) instead of submit methods without
  *      {@code priority} parameter (such as {@link #submit(java.util.concurrent.Callable)}).</li>
@@ -100,8 +100,8 @@ import java.util.function.*;
  * @author Roman Sakno
  * @since 1.0
  * @version 1.0
- * @see org.asyncj.impl.TaskExecutor
- * @see org.asyncj.impl.PriorityTaskExecutor
+ * @see asyncj.impl.TaskExecutor
+ * @see asyncj.impl.PriorityTaskExecutor
  */
 public abstract class ActiveObject {
     private final TaskScheduler scheduler;

@@ -1,7 +1,7 @@
-package org.asyncj.impl;
+package asyncj.impl;
 
-import org.asyncj.AsyncResult;
-import org.asyncj.PriorityTaskScheduler;
+import asyncj.AsyncResult;
+import asyncj.PriorityTaskScheduler;
 
 import java.util.Comparator;
 import java.util.concurrent.Callable;
@@ -78,7 +78,7 @@ public abstract class AbstractPriorityTaskScheduler extends AbstractTaskSchedule
     protected abstract <T> PriorityTask<T> newTaskFor(final Callable<T> callable, final int priority);
 
     /**
-     * Returns a {@link org.asyncj.impl.Task} for the given callable task.
+     * Returns a {@link Task} for the given callable task.
      *
      * @param callable the callable task being wrapped
      * @return a {@code RunnableFuture} which, when run, will call the

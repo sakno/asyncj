@@ -1,5 +1,7 @@
-package org.asyncj;
+package asyncj;
 
+import asyncj.AsyncResult;
+import asyncj.AsyncUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -13,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * Test set for {@link org.asyncj.AsyncUtils} class.
+ * Test set for {@link asyncj.AsyncUtils} class.
  * @author Roman Sakno
  * @version 1.0
  * @since 1.0

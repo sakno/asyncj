@@ -1,6 +1,6 @@
-package org.asyncj;
+package asyncj;
 
-import org.asyncj.impl.Task;
+import asyncj.impl.Task;
 import org.junit.Assert;
 import org.junit.Test;
 
