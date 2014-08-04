@@ -1,6 +1,6 @@
-package org.asyncj;
+package asyncj;
 
-import org.asyncj.impl.TaskExecutor;
+import asyncj.impl.TaskExecutor;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -21,10 +21,10 @@ import java.util.function.*;
  *         represented by {@link java.util.concurrent.Callable}.</li>
  *     </ul>
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
- * @see org.asyncj.TaskScheduler
- * @see org.asyncj.PriorityTaskScheduler
+ * @see TaskScheduler
+ * @see PriorityTaskScheduler
  */
 public final class AsyncUtils {
     private static final class PriorityCallable<V, P extends Enum<P> & IntSupplier> implements IntSupplier, Callable<V> {

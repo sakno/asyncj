@@ -1,9 +1,9 @@
-package org.asyncj;
+package asyncj;
 
 /**
  * Represents asynchronous callback that can be called by asynchronous task on its completion.
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
  */
 @FunctionalInterface

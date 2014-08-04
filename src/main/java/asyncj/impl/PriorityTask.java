@@ -1,7 +1,7 @@
-package org.asyncj.impl;
+package asyncj.impl;
 
-import org.asyncj.PriorityTaskScheduler;
-import org.asyncj.TaskScheduler;
+import asyncj.PriorityTaskScheduler;
+import asyncj.TaskScheduler;
 
 import java.util.HashMap;
 import java.util.concurrent.Callable;
@@ -12,7 +12,7 @@ import java.util.function.IntSupplier;
  * @param <V> Type of the asynchronous computation result.
  * @author Roman Sakno
  * @since 1.0
- * @version 1.0
+ * @version 1.1
  */
 public abstract class PriorityTask<V> extends Task<V> implements Comparable<PriorityTask>, IntSupplier{
     private final int priority;
