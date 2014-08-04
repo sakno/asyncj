@@ -8,7 +8,7 @@ import java.util.function.Function;
 /**
  * Represents task scheduler that extends Java {@link java.util.concurrent.ExecutorService} interface.
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
  */
 public interface TaskScheduler extends ExecutorService {

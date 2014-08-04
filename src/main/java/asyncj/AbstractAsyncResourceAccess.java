@@ -12,7 +12,7 @@ import java.util.function.Function;
  * </p>
  * @author Roman Sakno
  * @since 1.0
- * @version 1.0
+ * @version 1.1
  */
 public abstract class AbstractAsyncResourceAccess<R> extends ActiveObject implements AsyncResourceAccess<R> {
     /**

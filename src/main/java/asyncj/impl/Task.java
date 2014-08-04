@@ -18,7 +18,7 @@ import java.util.function.ToIntFunction;
  * </p>
  * @param <V> Type of the asynchronous computation result.
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
  */
 public abstract class Task<V> extends AbstractQueuedSynchronizer implements AsyncResult<V>, RunnableFuture<V>, Callable<V> {

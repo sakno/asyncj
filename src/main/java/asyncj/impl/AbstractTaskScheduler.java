@@ -9,7 +9,7 @@ import java.util.function.Function;
 /**
  * Represents abstract task scheduler.
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
  */
 public abstract class AbstractTaskScheduler extends ThreadPoolExecutor implements TaskScheduler {

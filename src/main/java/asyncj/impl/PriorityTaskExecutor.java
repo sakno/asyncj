@@ -20,7 +20,7 @@ import java.util.function.IntSupplier;
  *     based on priority.
  * </p>
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
  */
 public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {

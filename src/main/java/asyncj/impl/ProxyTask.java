@@ -12,7 +12,7 @@ import java.util.function.*;
 /**
  * Represents proxy task that wraps another asynchronous result.
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
  */
 abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements AsyncResult<O>, RunnableFuture<O> {

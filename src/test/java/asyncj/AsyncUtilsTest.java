@@ -17,7 +17,7 @@ import java.util.concurrent.TimeoutException;
 /**
  * Test set for {@link asyncj.AsyncUtils} class.
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
  */
 public final class AsyncUtilsTest extends Assert {

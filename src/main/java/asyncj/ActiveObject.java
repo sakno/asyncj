@@ -99,7 +99,7 @@ import java.util.function.*;
  *  </code></pre>
  * @author Roman Sakno
  * @since 1.0
- * @version 1.0
+ * @version 1.1
  * @see asyncj.impl.TaskExecutor
  * @see asyncj.impl.PriorityTaskExecutor
  */

@@ -14,7 +14,7 @@ import java.util.function.IntSupplier;
  * Represents an abstract class for constructing prioritized task scheduler.
  * @author Roman Sakno
  * @since 1.0
- * @version 1.0
+ * @version 1.1
  */
 public abstract class AbstractPriorityTaskScheduler extends AbstractTaskScheduler implements PriorityTaskScheduler {
     /**

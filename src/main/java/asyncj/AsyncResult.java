@@ -11,7 +11,7 @@ import java.util.function.Function;
  * Represents state of the asynchronous computation.
  * @param <V> Type of the asynchronous computation result.
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
  */
 public interface AsyncResult<V> extends Future<V> {

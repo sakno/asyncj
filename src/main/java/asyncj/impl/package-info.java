@@ -12,7 +12,7 @@
  *
  * @author Roman Sakno
  * @since 1.0
- * @version 1.0
+ * @version 1.1
  * @see asyncj.impl.AbstractTaskScheduler
  * @see asyncj.impl.AbstractPriorityTaskScheduler
  * @see asyncj.impl.Task

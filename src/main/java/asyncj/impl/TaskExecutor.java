@@ -14,7 +14,7 @@ import java.util.concurrent.TimeUnit;
  * Represents simple task scheduler that represents bridge
  * between {@link java.util.concurrent.ExecutorService} and {@link asyncj.TaskScheduler}.
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
  */
 public final class TaskExecutor extends AbstractTaskScheduler {
