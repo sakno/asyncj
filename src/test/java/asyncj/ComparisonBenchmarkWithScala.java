@@ -1,9 +1,12 @@
-package org.asyncj;
+package asyncj;
 
 import akka.dispatch.ExecutionContexts;
 import akka.dispatch.Futures;
 import akka.dispatch.Mapper;
-import org.asyncj.impl.TaskExecutor;
+import asyncj.AsyncResult;
+import asyncj.AsyncUtils;
+import asyncj.TaskScheduler;
+import asyncj.impl.TaskExecutor;
 import org.junit.Test;
 import scala.concurrent.Await;
 import scala.concurrent.ExecutionContextExecutor;
@@ -17,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Comparison benchmark with Akka library.
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
  */
 public final class ComparisonBenchmarkWithScala {

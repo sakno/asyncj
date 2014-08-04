@@ -1,4 +1,4 @@
-package org.asyncj;
+package asyncj;
 
 import java.util.concurrent.Callable;
 import java.util.function.IntSupplier;
@@ -7,7 +7,7 @@ import java.util.function.IntSupplier;
  * Represents scheduler that supports prioritized task execution.
  * @author Roman Sakno
  * @since 1.0
- * @version 1.0
+ * @version 1.1
  */
 public interface PriorityTaskScheduler extends TaskScheduler {
 

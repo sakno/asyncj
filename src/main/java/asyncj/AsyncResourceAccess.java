@@ -1,4 +1,4 @@
-package org.asyncj;
+package asyncj;
 
 import java.util.function.Function;
 
@@ -6,7 +6,7 @@ import java.util.function.Function;
  * Represents container for synchronous resource that can be represented as
  * asynchronous object.
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
  */
 public interface AsyncResourceAccess<R> {

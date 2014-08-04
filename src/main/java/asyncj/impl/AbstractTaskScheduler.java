@@ -1,7 +1,7 @@
-package org.asyncj.impl;
+package asyncj.impl;
 
-import org.asyncj.AsyncResult;
-import org.asyncj.TaskScheduler;
+import asyncj.AsyncResult;
+import asyncj.TaskScheduler;
 
 import java.util.concurrent.*;
 import java.util.function.Function;
@@ -9,7 +9,7 @@ import java.util.function.Function;
 /**
  * Represents abstract task scheduler.
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
  */
 public abstract class AbstractTaskScheduler extends ThreadPoolExecutor implements TaskScheduler {
@@ -46,7 +46,7 @@ public abstract class AbstractTaskScheduler extends ThreadPoolExecutor implement
     }
 
     /**
-     * Returns a {@link org.asyncj.impl.Task} for the given callable task.
+     * Returns a {@link Task} for the given callable task.
      *
      * @param callable the callable task being wrapped
      * @return a {@code RunnableFuture} which, when run, will call the
@@ -58,7 +58,7 @@ public abstract class AbstractTaskScheduler extends ThreadPoolExecutor implement
     protected abstract <T> Task<T> newTaskFor(final Callable<T> callable);
 
     /**
-     * Returns a {@link org.asyncj.impl.Task} for the given runnable and default
+     * Returns a {@link Task} for the given runnable and default
      * value.
      *
      * @param runnable the runnable task being wrapped
@@ -127,7 +127,7 @@ public abstract class AbstractTaskScheduler extends ThreadPoolExecutor implement
      * Interrupts thread associated with the specified asynchronous computation.
      * <p>
      * This method based on that fact that all tasks instantiated by this scheduler implement
-     * {@link org.asyncj.impl.AbstractTaskScheduler.ThreadAffinityAsyncResult} interface.
+     * {@link AbstractTaskScheduler.ThreadAffinityAsyncResult} interface.
      * </p>
      *
      * @param ar The asynchronous computation to interrupt.

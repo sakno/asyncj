@@ -1,6 +1,9 @@
-package org.asyncj;
+package asyncj;
 
-import org.asyncj.impl.TaskExecutor;
+import asyncj.ActiveObject;
+import asyncj.AsyncCallback;
+import asyncj.AsyncResult;
+import asyncj.impl.TaskExecutor;
 
 import java.lang.reflect.Array;
 

@@ -1,15 +1,14 @@
-package org.asyncj;
+package asyncj;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
 import java.util.concurrent.RunnableFuture;
 import java.util.function.Function;
 
 /**
  * Represents task scheduler that extends Java {@link java.util.concurrent.ExecutorService} interface.
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
  */
 public interface TaskScheduler extends ExecutorService {

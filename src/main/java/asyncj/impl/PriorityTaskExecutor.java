@@ -1,8 +1,8 @@
-package org.asyncj.impl;
+package asyncj.impl;
 
-import org.asyncj.AsyncUtils;
-import org.asyncj.PriorityTaskScheduler;
-import org.asyncj.TaskScheduler;
+import asyncj.AsyncUtils;
+import asyncj.PriorityTaskScheduler;
+import asyncj.TaskScheduler;
 
 import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
@@ -20,7 +20,7 @@ import java.util.function.IntSupplier;
  *     based on priority.
  * </p>
  * @author Roman Sakno
- * @version 1.0
+ * @version 1.1
  * @since 1.0
  */
 public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
