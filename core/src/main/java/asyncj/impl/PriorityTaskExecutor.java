@@ -18,7 +18,6 @@ import java.util.function.IntSupplier;
  *     Preemptive task scheduler may use one or more threads which shares
  *     priority queue. The priority queue contains the tasks ordered
  *     based on priority.
- * </p>
  * @author Roman Sakno
  * @version 1.1
  * @since 1.0

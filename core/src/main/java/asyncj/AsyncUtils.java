@@ -110,7 +110,6 @@ public final class AsyncUtils {
      *         <li>If {@link java.util.ServiceLoader} doesn't contain any schedulers then
      *         default scheduler will be created using {@link asyncj.impl.TaskExecutor#newDefaultThreadExecutor()} method.</li>
      *     </ul>
-     * </p>
      * @return An instance of the global scheduler.
      */
     public static TaskScheduler getGlobalScheduler() {

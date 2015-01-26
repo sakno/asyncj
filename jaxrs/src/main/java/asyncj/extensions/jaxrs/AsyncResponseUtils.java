@@ -21,37 +21,36 @@ import javax.ws.rs.container.AsyncResponse;
  *
  *         import static asyncj.extensions.jaxrs.AsyncResponseUtils.*;
  *
- *         @ Path("/")
- *         @ Singleton
+ *         {@literal @}Path("/")
+ *         {@literal @}Singleton
  *         public final class SimpleServiceImpl extends ActiveObject {
  *
  *              public SimpleServiceImpl() {
  *                  super(AsyncUtils.getGlobalScheduler());
  *              }
  *
- *         @ GET
- *         @ Path("/simpleGet")
- *         @ Produces(MediaType.TEXT_PLAIN)
+ *         {@literal @}GET
+ *         {@literal @}Path("/simpleGet")
+ *         {@literal @}Produces(MediaType.TEXT_PLAIN)
  *         public void simpleGet(@Suspended final AsyncResponse response) {
  *              successful("Hello, ")
- *                  .then((String value) -> value + "world!")
+ *                  .then((String value) -&gt; value + "world!")
  *                  .then(responseTask(response));
  *          }
  *
- *          @ GET
- *          @ Path("/array")
- *          @ Produces(MediaType.TEXT_PLAIN)
+ *          {@literal @}GET
+ *          {@literal @}Path("/array")
+ *          {@literal @}Produces(MediaType.TEXT_PLAIN)
  *          public void emulateWork(@Suspended final AsyncResponse response,
- *          @ QueryParam("length") final int length) {
- *              reduceUntil(cond -> cond == 0 ? null : cond - 1,
- *              (accumulator, cond) -> cond + accumulator,
+ *          {@literal @}QueryParam("length") final int length) {
+ *              reduceUntil(cond -&gt; cond == 0 ? null : cond - 1,
+ *              (accumulator, cond) -&gt; cond + accumulator,
  *              length,
  *              "")
  *              .onCompleted(responseCallback(response));
  *          }
  *      }
  *     </code>
- * </p>
  * @author Roman Sakno
  * @version 1.0
  * @since 1.0
