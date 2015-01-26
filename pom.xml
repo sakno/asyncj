@@ -2,11 +2,11 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <parent>
+    <!--<parent>
         <groupId>org.sonatype.oss</groupId>
         <artifactId>oss-parent</artifactId>
         <version>7</version>
-    </parent>
+    </parent>-->
     <modelVersion>4.0.0</modelVersion>
     <groupId>asyncj</groupId>
     <artifactId>all</artifactId>
@@ -38,7 +38,7 @@
     </properties>
 	 <modules>
       <module>core</module>
-         <module>jaxrs</module>
+      <module>jaxrs</module>
      </modules>
     <distributionManagement>
         <!-- Repository for snapshots -->

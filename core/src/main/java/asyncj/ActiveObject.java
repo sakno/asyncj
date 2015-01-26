@@ -593,7 +593,9 @@ public abstract class ActiveObject {
      *
      * @param predicate    Loop iteration. If predicate returns {@literal false} then loop will break. Cannot be {@literal null}.
      * @param initialState The initial state of the looping. This object may be used as mutable object that can be rested in predicate.
+     * @param priority The priority of the tasks executed in this algorithm.
      * @param <I>          Type of the looping state.
+     * @param <P>          Type of the priority descriptor.
      * @return The object that represents asynchronous state of the asynchronous looping.
      */
     protected final <I, P extends Enum<P> & IntSupplier> AsyncResult<I> flatUntil(final Function<I, AsyncResult<Boolean>> predicate,
@@ -664,6 +666,7 @@ public abstract class ActiveObject {
      * @param priority The priority of the tasks
      * @param <R> Type of the operation result.
      * @param <C> Type of the conditional object.
+     * @param <P> Type of the priority descriptor.
      * @return An object that represents state of the asynchronous reduce-until execution.
      */
     public final  <R, C, P extends Enum<P> & IntSupplier> AsyncResult<R> reduceUntil(final Function<C, C> predicate,
