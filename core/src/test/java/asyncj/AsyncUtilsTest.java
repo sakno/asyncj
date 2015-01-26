@@ -1,7 +1,5 @@
 package asyncj;
 
-import asyncj.AsyncResult;
-import asyncj.AsyncUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -102,6 +100,7 @@ public final class AsyncUtilsTest extends Assert {
         assertTrue(result.contains(44));
     }
 
+    @SuppressWarnings("unchecked")
     @Test(expected = ExecutionException.class)
     public void getAllTestWithFailure() throws ExecutionException, InterruptedException{
         final AsyncResult<Integer> a1 = AsyncUtils.successful(AsyncUtils.getGlobalScheduler(), 42);
@@ -110,6 +109,7 @@ public final class AsyncUtilsTest extends Assert {
         AsyncUtils.getAll(a1, a2, a3);
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     public void sequenceTest() throws ExecutionException, InterruptedException {
         final AsyncResult<Integer> a1 = AsyncUtils.successful(AsyncUtils.getGlobalScheduler(), 42);
@@ -123,5 +123,16 @@ public final class AsyncUtilsTest extends Assert {
         assertTrue(s.contains(42));
         assertTrue(s.contains(43));
         assertTrue(s.contains(44));
+    }
+
+    @Test
+    public void reduceUntilTest() throws ExecutionException, InterruptedException {
+        final AsyncResult<String> ar = AsyncUtils.reduceUntil(AsyncUtils.getGlobalScheduler(),
+                cond -> cond == 0 ? null : cond - 1,
+                (accumulator, cond) -> cond + accumulator,
+                10,
+                "");
+        final String result = ar.get();
+        assertEquals("0123456789", result);
     }
 }

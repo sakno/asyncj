@@ -637,4 +637,59 @@ public abstract class ActiveObject {
     protected final <T> AsyncResult<Iterable<T>> sequence(final AsyncResult<T>... values) {
         return AsyncUtils.sequence(scheduler, values);
     }
+
+    /**
+     * Reduces values until the specified predicate will not return {@literal null}.
+     * @param predicate The predicate used to produce a new conditional object. Cannot be {@literal null}.
+     * @param reducer The action used to combine current condition object with the accumulator. Cannot be {@literal null}.
+     * @param initialState The initial conditional object.
+     * @param defaultResult The initial accumulator value.
+     * @param <R> Type of the operation result.
+     * @param <C> Type of the conditional object.
+     * @return An object that represents state of the asynchronous reduce-until execution.
+     */
+    public final  <R, C> AsyncResult<R> reduceUntil(final Function<C, C> predicate,
+                                                    final BiFunction<R, C, R> reducer,
+                                                    final C initialState,
+                                                    final R defaultResult){
+        return AsyncUtils.reduceUntil(scheduler, predicate, reducer, initialState, defaultResult);
+    }
+
+    /**
+     * Reduces values until the specified predicate will not return {@literal null}.
+     * @param predicate The predicate used to produce a new conditional object. Cannot be {@literal null}.
+     * @param reducer The action used to combine current condition object with the accumulator. Cannot be {@literal null}.
+     * @param initialState The initial conditional object.
+     * @param defaultResult The initial accumulator value.
+     * @param priority The priority of the tasks
+     * @param <R> Type of the operation result.
+     * @param <C> Type of the conditional object.
+     * @return An object that represents state of the asynchronous reduce-until execution.
+     */
+    public final  <R, C, P extends Enum<P> & IntSupplier> AsyncResult<R> reduceUntil(final Function<C, C> predicate,
+                                                    final BiFunction<R, C, R> reducer,
+                                                    final C initialState,
+                                                    final R defaultResult,
+                                                    final P priority){
+        return reduceUntil(predicate, reducer,
+                prioritizeScalar(initialState, priority),
+                prioritizeScalar(defaultResult, priority));
+    }
+
+    /**
+     * Reduces values until the specified predicate will not return {@literal null}.
+     * @param predicate The predicate used to produce a new conditional object. Cannot be {@literal null}.
+     * @param reducer The action used to combine current condition object with the accumulator. Cannot be {@literal null}.
+     * @param initialState The initial conditional object. Cannot be {@literal null}.
+     * @param defaultResult The initial accumulator value. Cannot be {@literal null}.
+     * @param <R> Type of the operation result.
+     * @param <C> Type of the conditional object.
+     * @return An object that represents state of the asynchronous reduce-until execution.
+     */
+    public final  <R, C> AsyncResult<R> reduceUntil(final Function<C, C> predicate,
+                                                    final BiFunction<R, C, R> reducer,
+                                                    final AsyncResult<C> initialState,
+                                                    final AsyncResult<R> defaultResult){
+        return AsyncUtils.reduceUntil(scheduler, predicate, reducer, initialState, defaultResult);
+    }
 }
