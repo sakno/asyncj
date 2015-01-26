@@ -12,6 +12,15 @@ import java.util.function.Function;
  * @since 1.0
  */
 public interface TaskScheduler extends ExecutorService {
+    /**
+     * Returns the number of processors available to the Java virtual machine.
+     *
+     * @return  the maximum number of processors available to the virtual
+     *          machine
+     **/
+    public static int availableProcessors(){
+        return Runtime.getRuntime().availableProcessors();
+    }
 
     /**
      * Interrupts thread associated with the specified asynchronous computation.
@@ -30,6 +39,7 @@ public interface TaskScheduler extends ExecutorService {
      * @param <T> Type of the asynchronous computation result.
      * @return An object that represents the state of the asynchronous computation.
      */
+    @SuppressWarnings("NullableProblems")
     @Override
     <T> AsyncResult<T> submit(final Callable<T> task);
 
@@ -44,6 +54,7 @@ public interface TaskScheduler extends ExecutorService {
      * @param <T> Type of the asynchronous computation result.
      * @return An object that represents the state of the asynchronous computation.
      */
+    @SuppressWarnings("NullableProblems")
     @Override
     default <T> AsyncResult<T> submit(final Runnable task, final T result) {
         return submit(() -> {
@@ -57,6 +68,7 @@ public interface TaskScheduler extends ExecutorService {
      * @param task The task to be executed asynchronously. Cannot be {@literal null}.
      * @return An object that represents the state of the asynchronous computation.
      */
+    @SuppressWarnings("NullableProblems")
     @Override
     default AsyncResult<Void> submit(final Runnable task) {
         return submit(task, null);
@@ -86,4 +98,17 @@ public interface TaskScheduler extends ExecutorService {
      * otherwise, {@literal false}.
      */
     boolean isScheduled(final AsyncResult<?> ar);
+
+    /**
+     * Gets priority of this scheduler.
+     * <p>
+     *     The scheduler priority used for resolving default scheduler for the application
+     *     using {@link java.util.ServiceLoader}.
+     * </p>
+     * @return The priority of this scheduler.
+     * @see AsyncUtils#getGlobalScheduler()
+     */
+    default int getPriority(){
+        return 0;
+    }
 }

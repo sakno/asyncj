@@ -117,6 +117,19 @@ public final class TaskExecutor extends AbstractTaskScheduler {
         });
     }
 
+    public static TaskExecutor newDefaultThreadExecutor(){
+        return new TaskExecutor(TaskScheduler.availableProcessors(),
+                TaskScheduler.availableProcessors() * 2,
+                30,
+                TimeUnit.SECONDS, r -> {
+            final Thread result = new Thread(r);
+            result.setDaemon(true);
+            result.setPriority(Thread.NORM_PRIORITY);
+            result.setContextClassLoader(Thread.currentThread().getContextClassLoader());
+            return result;
+        });
+    }
+
     /**
      * Creates a new cached thread scheduler that may use no more that on thread for
      * executing tasks.
