@@ -22,6 +22,7 @@ import java.util.function.ToIntFunction;
  * @since 1.0
  */
 public abstract class Task<V> extends AbstractQueuedSynchronizer implements AsyncResult<V>, RunnableFuture<V>, Callable<V> {
+
     private static boolean useAdvancedStringRepresentation = false;
 
     private static final int CREATED_STATE = 1;  //initial state

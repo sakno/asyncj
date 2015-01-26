@@ -77,31 +77,34 @@ public abstract class AbstractTaskScheduler extends ThreadPoolExecutor implement
     }
 
     /**
-     * @param task
+     * @param task The task to submit.
      * @throws java.util.concurrent.RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException                            {@inheritDoc}
      */
+    @SuppressWarnings("NullableProblems")
     @Override
     public final <T> AsyncResult<T> submit(final Callable<T> task) {
         return submitDirect(scheduler -> newTaskFor(task));
     }
 
     /**
-     * @param task
-     * @param result
+     * @param task The task to submit. Cannot be {@literal null}.
+     * @param result An object that represents status of the task asynchronous execution.
      * @throws java.util.concurrent.RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException                            {@inheritDoc}
      */
+    @SuppressWarnings("NullableProblems")
     @Override
     public final <T> AsyncResult<T> submit(final Runnable task, final T result) {
         return submitDirect(scheduler -> newTaskFor(task, result));
     }
 
     /**
-     * @param task
+     * @param task The task to submit. Cannot be {@literal null}.
      * @throws java.util.concurrent.RejectedExecutionException {@inheritDoc}
      * @throws NullPointerException                            {@inheritDoc}
      */
+    @SuppressWarnings("NullableProblems")
     @Override
     public final AsyncResult<Void> submit(final Runnable task) {
         return this.<Void>submit(task, null);
@@ -134,7 +137,7 @@ public abstract class AbstractTaskScheduler extends ThreadPoolExecutor implement
      * @return {@literal true}, if the specified asynchronous computation is interrupted; otherwise, {@literal false}.
      */
     @Override
-    public boolean interrupt(final AsyncResult<?> ar) {
+    public final boolean interrupt(final AsyncResult<?> ar) {
         return ar instanceof ThreadAffinityAsyncResult<?> &&
                 interrupt((ThreadAffinityAsyncResult<?>) ar);
     }

@@ -84,19 +84,44 @@ public final class AsyncUtils {
     private AsyncUtils(){
     }
 
-    private static TaskScheduler globalScheduler;
+    private static volatile TaskScheduler globalScheduler;
     private static boolean useOverriddenScheduler = false;
+    private static final Object staticLock = new Object();
+
+    private static TaskScheduler getGlobalSchedulerImpl() {
+        final Iterator<TaskScheduler> schedulers = ServiceLoader.load(TaskScheduler.class).iterator();
+        TaskScheduler result = null;
+        while (schedulers.hasNext()) {
+            final TaskScheduler current = schedulers.next();
+            if (result == null || current.getPriority() > result.getPriority())
+                result = current;
+        }
+        return result == null ? TaskExecutor.newDefaultThreadExecutor() : result;
+    }
 
     /**
      * Gets global task scheduler for executing asynchronous computation not associated with any active object.
      * This method is not thread-safe.
+     * <p>
+     *     This method resolves global scheduler in the following manner:
+     *     <ul>
+     *         <li>Loads instances of {@link asyncj.TaskScheduler} from {@link java.util.ServiceLoader}
+     *         and select the sheduler with maximum {@link TaskScheduler#getPriority()} value.</li>
+     *         <li>If {@link java.util.ServiceLoader} doesn't contain any schedulers then
+     *         default scheduler will be created using {@link asyncj.impl.TaskExecutor#newDefaultThreadExecutor()} method.</li>
+     *     </ul>
+     * </p>
      * @return An instance of the global scheduler.
-     * @see #setGlobalScheduler(TaskScheduler)
      */
-    public static TaskScheduler getGlobalScheduler(){
-        if(globalScheduler == null)
-            globalScheduler = TaskExecutor.newSingleThreadExecutor();
-        return globalScheduler;
+    public static TaskScheduler getGlobalScheduler() {
+        TaskScheduler scheduler = globalScheduler;
+        if(scheduler == null)
+            synchronized (staticLock){
+                scheduler = globalScheduler;
+                if(scheduler == null)
+                    scheduler = globalScheduler = getGlobalSchedulerImpl();
+            }
+        return scheduler;
     }
 
     /**
@@ -107,7 +132,11 @@ public final class AsyncUtils {
      *
      * @param scheduler The global scheduler. Cannot be {@literal null}.
      * @return {@literal true}, if global scheduler is overridden successfully; otherwise, {@literal false}.
+     * @deprecated Your application should register global scheduler using
+     *      service-provider loading facility (via META-INF/services). For more information,
+     *      see {@link java.util.ServiceLoader} and {@link #getGlobalScheduler()}.
      */
+    @Deprecated
     public static boolean setGlobalScheduler(final TaskScheduler scheduler){
         if(useOverriddenScheduler) return false;
         globalScheduler = Objects.requireNonNull(scheduler, "scheduler is null.");
@@ -119,8 +148,11 @@ public final class AsyncUtils {
      * This method is not thread-safe.
      * <p>
      * It is recommended to call this method inside of JVM shutdown hooks
+     * </p>
+     * @deprecated Just remove this method call without any replacement
      * @see Runtime#addShutdownHook(Thread)
      */
+    @Deprecated
     public static void shutdownGlobalScheduler() {
         useOverriddenScheduler = false;
         if (globalScheduler != null) globalScheduler.shutdown();
@@ -489,6 +521,76 @@ public final class AsyncUtils {
                             final Predicate<I> predicate,
                             final I initialState){
         return until(scheduler, predicate, successful(scheduler, initialState));
+    }
+
+    private static final class UntilState<R, C>{
+        private final R accumulator;
+        private C condition;
+
+        private UntilState(final R acc, final C condition){
+            this.accumulator = acc;
+            this.condition = condition;
+        }
+
+        private boolean check(final Function<C, C> predicate){
+            return (condition = predicate.apply(condition)) != null;
+        }
+
+        private UntilState<R, C> apply(final BiFunction<R, C, R> modifier){
+            return new UntilState<>(modifier.apply(accumulator, condition), condition);
+        }
+    }
+
+    private static <R, C> AsyncResult<R> reduceUntil(final TaskScheduler scheduler,
+                                                         final Function<C, C> predicate,
+                                                         final BiFunction<R, C, R> reducer,
+                                                         final UntilState<R, C> initialState){
+        return until(scheduler,
+                state -> state.check(predicate),
+                state -> state.apply(reducer), initialState)
+                .then((UntilState<R, C> state) -> successful(scheduler, state.accumulator));
+    }
+
+    /**
+     * Reduces values until the specified predicate will not return {@literal null}.
+     * @param scheduler The scheduler used to submit loop iterations. Cannot be {@literal null}.
+     * @param predicate The predicate used to produce a new conditional object. Cannot be {@literal null}.
+     * @param reducer The action used to combine current condition object with the accumulator. Cannot be {@literal null}.
+     * @param initialState The initial conditional object. Cannot be {@literal null}.
+     * @param defaultResult The initial accumulator value. Cannot be {@literal null}.
+     * @param <R> Type of the operation result.
+     * @param <C> Type of the conditional object.
+     * @return An object that represents state of the asynchronous reduce-until execution.
+     */
+    public static <R, C> AsyncResult<R> reduceUntil(final TaskScheduler scheduler,
+                                              final Function<C, C> predicate,
+                                              final BiFunction<R, C, R> reducer,
+                                              final AsyncResult<C> initialState,
+                                              final AsyncResult<R> defaultResult){
+        return initialState.then((C c) -> defaultResult.then((R r) -> reduceUntil(scheduler, predicate, reducer, new UntilState<>(r, c))));
+    }
+
+    /**
+     * Reduces values until the specified predicate will not return {@literal null}.
+     * @param scheduler The scheduler used to submit loop iterations. Cannot be {@literal null}.
+     * @param predicate The predicate used to produce a new conditional object. Cannot be {@literal null}.
+     * @param reducer The action used to combine current condition object with the accumulator. Cannot be {@literal null}.
+     * @param initialState The initial conditional object.
+     * @param defaultResult The initial accumulator value.
+     * @param <R> Type of the operation result.
+     * @param <C> Type of the conditional object.
+     * @return An object that represents state of the asynchronous reduce-until execution.
+     */
+    public static <R, C> AsyncResult<R> reduceUntil(final TaskScheduler scheduler,
+                                              final Function<C, C> predicate,
+                                              final BiFunction<R, C, R> reducer,
+                                              final C initialState,
+                                              final R defaultResult){
+        return reduceUntil(scheduler,
+                predicate,
+                reducer,
+                successful(scheduler, initialState),
+                successful(scheduler, defaultResult));
     }
 
     /**
