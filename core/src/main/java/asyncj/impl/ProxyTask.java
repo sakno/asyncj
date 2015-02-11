@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.AbstractQueuedSynchronizer;
 import java.util.function.*;
 
@@ -16,17 +17,58 @@ import java.util.function.*;
  * @since 1.0
  */
 abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements AsyncResult<O>, RunnableFuture<O> {
+    //node in linked list that holds callback and the next node
+    private static final class AsyncCallbackNode<O> {
+        private AsyncCallbackNode<O> next;
+        private final AsyncCallback<? super O> callback;
+
+        private AsyncCallbackNode(final AsyncCallback<? super O> callback) {
+            this.callback = Objects.requireNonNull(callback);
+            this.next = null;
+        }
+
+        private AsyncCallbackNode<O> setNext(final AsyncCallback<? super O> callback) {
+            return next = new AsyncCallbackNode<>(callback);
+        }
+    }
+
+    //represents buffer of callbacks
+    private static final class AsyncCallbackChain<O> {
+        private final AsyncCallbackNode<O> first;
+        private final AsyncCallbackNode<O> tail;
+
+        private AsyncCallbackChain(){
+            this(null);
+        }
+
+        private AsyncCallbackChain(final AsyncCallbackNode<O> first){
+            this.first = this.tail = first;
+        }
+
+        private AsyncCallbackChain(final AsyncCallbackChain<O> previous,
+                                   final AsyncCallback<? super O> next){
+            this.first = Objects.requireNonNull(previous).first;
+            this.tail = previous.tail.setNext(next);
+        }
+
+        private AsyncCallbackChain<O> put(final AsyncCallback<? super O> callback) {
+            return first == null || tail == null ?
+                    new AsyncCallbackChain<>(new AsyncCallbackNode<>(callback)) :
+                    new AsyncCallbackChain<>(this, callback);
+        }
+    }
 
     private static final int PENDING_STATE = 1, //represents initial state of the proxy task
                              CANCELLED_STATE = 2, //proxy task is cancelled
                              WRAPPED_STATE = 4, //proxy task wraps another asynchronous result
                              FINAL_STATE = CANCELLED_STATE | WRAPPED_STATE;
 
-
+    private static final AsyncCallbackChain EMPTY_CHAIN = new AsyncCallbackChain();
     private final TaskScheduler scheduler;
     final AsyncResult<I> parent;
     private AsyncResult<O> underlyingTask;
     private volatile boolean preventTransition;
+    private final AtomicReference<AsyncCallbackChain<O>> callbacks;
 
     protected ProxyTask(final TaskScheduler scheduler, final AsyncResult<I> parent){
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler is null.");
@@ -34,6 +76,22 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
         setState(PENDING_STATE);
         preventTransition = false;
         underlyingTask = null;
+        callbacks = new AtomicReference<>(getEmptyChain());
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <O> AsyncCallbackChain<O> getEmptyChain(){
+        return EMPTY_CHAIN;
+    }
+
+    private void delayCallback(final AsyncCallback<? super O> callback) {
+        callbacks.updateAndGet(chain -> chain.put(callback));
+    }
+
+    private void attachCallbacks(final AsyncResult<O> ar) {
+        final AsyncCallbackChain<O> chain = callbacks.getAndUpdate(ch -> getEmptyChain());
+        for (AsyncCallbackNode<O> node = chain.first; node != null; node = node.next)
+            ar.onCompleted(node.callback);
     }
 
     @Override
@@ -69,10 +127,6 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
      */
     protected abstract void run(final I result, final Exception err);
 
-    protected final void complete(final O value){
-        complete(AsyncUtils.successful(scheduler, value));
-    }
-
     protected final void complete(final AsyncResult<O> ar) {
         int currentState;
         do {
@@ -83,11 +137,12 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
                     return;
             }
         } while (preventTransition || !compareAndSetState(currentState, WRAPPED_STATE));
-        underlyingTask = ar;
+        attachCallbacks(underlyingTask = ar);
+        //attaches callbacks to the underlying task
         releaseShared(0);
     }
 
-    protected final void failure(final Exception err){
+    protected void failure(final Exception err){
         complete(AsyncUtils.failure(scheduler, err));
     }
 
@@ -379,7 +434,7 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
         });
     }
 
-    private static <O> Function<TaskScheduler, ProxyTask<O, Void>> createCallbackTaskFactory(final AsyncResult<O> parent,
+    /*private static <O> Function<TaskScheduler, ProxyTask<O, Void>> createCallbackTaskFactory(final AsyncResult<O> parent,
                                                                                              final AsyncCallback<? super O> callback) {
         return scheduler -> new ProxyTask<O, Void>(scheduler, parent) {
             @Override
@@ -389,7 +444,7 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
                 else complete((Void) null);
             }
         };
-    }
+    }*/
 
     @Override
     public final void onCompleted(final AsyncCallback<? super O> callback) {
@@ -397,7 +452,9 @@ abstract class ProxyTask<I, O> extends AbstractQueuedSynchronizer implements Asy
         nonTransitive((int currentState) -> {
             switch (currentState) {
                 case PENDING_STATE:
-                    scheduler.submitDirect(createCallbackTaskFactory(this, callback));
+                    //to avoid recursive create we save callback instead of its scheduling
+                    //scheduler.submitDirect(createCallbackTaskFactory(this, callback));
+                    delayCallback(callback);
                     return;
                 case WRAPPED_STATE:
                     underlyingTask.onCompleted(callback);
