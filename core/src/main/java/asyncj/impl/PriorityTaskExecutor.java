@@ -1,11 +1,7 @@
 package asyncj.impl;
 
 import asyncj.AsyncUtils;
-import asyncj.PriorityTaskScheduler;
-import asyncj.TaskScheduler;
 
-import java.lang.ref.Reference;
-import java.lang.ref.WeakReference;
 import java.util.EnumSet;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ThreadFactory;
@@ -23,53 +19,6 @@ import java.util.function.IntSupplier;
  * @since 1.0
  */
 public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
-
-    private static abstract class ThreadAffinityPriorityTask<V> extends PriorityTask<V> implements ThreadAffinityAsyncResult<V> {
-        private Reference<Thread> affinity = null;
-
-        private ThreadAffinityPriorityTask(final PriorityTaskScheduler scheduler, final int priority) {
-            super(scheduler, priority);
-        }
-
-        private static <T> ThreadAffinityPriorityTask<T> create(final PriorityTaskScheduler scheduler,
-                                                                final Callable<T> task,
-                                                                final int priority) {
-            return new ThreadAffinityPriorityTask<T>(scheduler, priority) {
-                @Override
-                public T call() throws Exception {
-                    return task.call();
-                }
-            };
-        }
-
-        /**
-         * Gets thread associated with the asynchronous computation.
-         * <p>
-         * This method is not deterministic and may return {@literal null} if
-         * thread that owns by this task is already completed, stopped or destroyed.
-         *
-         * @return The thread associated with the asynchronous computation.
-         */
-        @Override
-        public final Thread getThread() {
-            return affinity != null ? affinity.get() : null;
-        }
-
-        private void setThread(final Thread value) {
-            affinity = new WeakReference<>(value);
-        }
-
-        private void clearThread(){
-            if(affinity != null) affinity.clear();
-            affinity = null;
-        }
-
-        @Override
-        protected final  <O> PriorityTask<O> newChildTask(final TaskScheduler scheduler, final Callable<O> task) {
-            return create((PriorityTaskScheduler) scheduler, task, getAsInt());
-        }
-    }
-
     private PriorityTaskExecutor(final int defaultPriority,
                                  final int corePoolSize,
                                  final int maximumPoolSize,
@@ -165,8 +114,13 @@ public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
     }
 
     @Override
-    protected <T> PriorityTask<T> newTaskFor(final Callable<T> callable, final int priority) {
-        return ThreadAffinityPriorityTask.create(this, callable, priority == AUTO_PRIORITY ? defaultPriority : priority);
+    protected <T> Task<T> newTaskFor(final Callable<T> callable, final int priority) {
+        return new Task<T>(this, priority == AUTO_PRIORITY ? defaultPriority : priority) {
+            @Override
+            public T call() throws Exception {
+                return callable.call();
+            }
+        };
     }
 
     /**
@@ -185,8 +139,8 @@ public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
      */
     @Override
     protected void beforeExecute(final Thread t, final Runnable r) {
-        if(r instanceof ThreadAffinityPriorityTask<?>)
-            ((ThreadAffinityPriorityTask<?>)r).setThread(t);
+        if(r instanceof Task<?>)
+            ((Task<?>)r).setExecutionThread(t);
     }
 
     /**
@@ -200,7 +154,7 @@ public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
      */
     @Override
     protected void afterExecute(final Runnable r, final Throwable t) {
-        if (r instanceof ThreadAffinityPriorityTask<?>)
-            ((ThreadAffinityPriorityTask<?>) r).clearThread();
+        if (r instanceof Task<?>)
+            ((Task<?>) r).clearThread();
     }
 }

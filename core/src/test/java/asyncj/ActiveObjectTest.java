@@ -99,7 +99,7 @@ public final class ActiveObjectTest extends Assert {
         final Integer[] arr = null;
         final String errorMsg = obj.reverseArray(arr)
                 .then((Integer[] a)->"Not null")
-                .then(ThrowableFunction.<String>identity(), Exception::getMessage).get(2, TimeUnit.SECONDS);
+                .then(ThrowableFunction.<String>identity(), Exception::getMessage).get(4, TimeUnit.SECONDS);
         assertNotNull(errorMsg);
         assertFalse(errorMsg.isEmpty());
         assertNotEquals("Not null", errorMsg);
@@ -123,21 +123,21 @@ public final class ActiveObjectTest extends Assert {
         Task.enableAdvancedStringRepresentation();
         final ArrayOperations obj = new ArrayOperations();
         AsyncResult<Integer[]> ar = obj.reverseArray(new Integer[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13});
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 100; i++) {
             ar = ar.then((Integer[] array) -> {
                 for (int j = 0; j < array.length; j++)
                     array[j] += j;
                 return array;
             });
         }
-        final Integer[] result = ar.get(4, TimeUnit.SECONDS);
+        final Integer[] result = ar.get(10, TimeUnit.SECONDS);
         assertNotNull(result);
         assertEquals(13, result.length);
     }
 
     @Test
     public void stressTest() throws InterruptedException, ExecutionException, TimeoutException {
-        final int REPEAT_COUNT = 30;
+        final int REPEAT_COUNT = 10;
         long averageTime = 0;
         for(int i = 0; i < REPEAT_COUNT; i++) {
             final long currentNanos = System.nanoTime();

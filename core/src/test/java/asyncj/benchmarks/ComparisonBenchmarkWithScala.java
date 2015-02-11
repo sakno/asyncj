@@ -26,9 +26,6 @@ import java.util.concurrent.TimeUnit;
  */
 @BenchmarkMethodChart(filePrefix = "asyncj-vs-scala")
 public final class ComparisonBenchmarkWithScala extends AbstractBenchmark {
-
-    private final TaskScheduler scheduler = TaskExecutor.newDefaultThreadExecutor();
-
     private final Integer[] source = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
     private final Mapper<Integer[], Integer[]> mapper = new Mapper<Integer[], Integer[]>() {
         @Override
@@ -39,7 +36,7 @@ public final class ComparisonBenchmarkWithScala extends AbstractBenchmark {
         }
     };
 
-    private static final int PIPELINE_LENGTH = 30000;
+    private static final int PIPELINE_LENGTH = 100;
 
     private void scalaPipeliningBenchmark(final ExecutionContextExecutor executor,
                                           final int pipelineLength) throws Exception {
@@ -50,7 +47,8 @@ public final class ComparisonBenchmarkWithScala extends AbstractBenchmark {
         Await.result(ar2, Duration.apply(5, TimeUnit.SECONDS));
     }
 
-    private void asyncjPipelineBenchmark(final int pipelineLength) throws Exception {
+    private void asyncjPipelineBenchmark(final TaskScheduler scheduler,
+                                         final int pipelineLength) throws Exception {
         //execute pipelining via AsyncJ
         AsyncResult<Integer[]> ar = AsyncUtils.successful(scheduler, source);
         for (int i = 0; i < pipelineLength; i++)
@@ -63,15 +61,16 @@ public final class ComparisonBenchmarkWithScala extends AbstractBenchmark {
     }
 
     @Test
-    @BenchmarkOptions(benchmarkRounds = 30, warmupRounds = 5)
+    @BenchmarkOptions(benchmarkRounds = 10, warmupRounds = 5)
     public void scalaPipelineBenchmark() throws Exception {
-        final ExecutionContextExecutor executor = ExecutionContexts.fromExecutor(scheduler);
+        final ExecutionContextExecutor executor = ExecutionContexts.fromExecutor(TaskExecutor.newDefaultThreadExecutor());
         scalaPipeliningBenchmark(executor, PIPELINE_LENGTH);
     }
 
     @Test
-    @BenchmarkOptions(benchmarkRounds = 30, warmupRounds = 5)
+    @BenchmarkOptions(benchmarkRounds = 10, warmupRounds = 5)
     public void asyncjPipelineBenchmark() throws Exception {
-        asyncjPipelineBenchmark(PIPELINE_LENGTH);
+        final TaskScheduler scheduler = TaskExecutor.newDefaultThreadExecutor();
+        asyncjPipelineBenchmark(scheduler, PIPELINE_LENGTH);
     }
 }

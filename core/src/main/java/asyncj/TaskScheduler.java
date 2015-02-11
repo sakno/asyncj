@@ -23,17 +23,6 @@ public interface TaskScheduler extends ExecutorService {
     }
 
     /**
-     * Interrupts thread associated with the specified asynchronous computation.
-     * <p>
-     *     This is infrastructure method and you should not use it directly from your code.
-     * <p>
-     *
-     * @param ar The asynchronous computation to interrupt.
-     * @return {@literal true}, if the specified asynchronous computation is interrupted; otherwise, {@literal false}.
-     */
-    boolean interrupt(final AsyncResult<?> ar);
-
-    /**
      * Submits a new task for asynchronous execution.
      * @param task The task to be executed asynchronously. Cannot be {@literal null}.
      * @param <T> Type of the asynchronous computation result.

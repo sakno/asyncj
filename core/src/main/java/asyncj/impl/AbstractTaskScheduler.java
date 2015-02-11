@@ -39,10 +39,13 @@ public abstract class AbstractTaskScheduler extends ThreadPoolExecutor implement
         super(corePoolSize, maximumPoolSize, keepAliveTime, unit, workQueue, threadFactory);
     }
 
+    private boolean isScheduled(final InternalAsyncResult<?> ar){
+        return ar.isScheduledBy(this);
+    }
+
     @Override
     public final boolean isScheduled(final AsyncResult<?> ar) {
-        return (ar instanceof Task<?> && ((Task<?>) ar).isScheduledBy(this)) ||
-                (ar instanceof ProxyTask<?, ?> && ((ProxyTask<?, ?>) ar).isScheduledBy(this));
+        return ar instanceof InternalAsyncResult<?> && isScheduled((InternalAsyncResult<?>)ar);
     }
 
     /**
@@ -115,30 +118,5 @@ public abstract class AbstractTaskScheduler extends ThreadPoolExecutor implement
         final T task = taskFactory.apply(this);
         execute(task);
         return task;
-    }
-
-    private boolean interrupt(final ThreadAffinityAsyncResult<?> ar){
-        final Thread owner = ar.getThread();
-        if(owner != null){
-            owner.interrupt();
-            return true;
-        }
-        else return false;
-    }
-
-    /**
-     * Interrupts thread associated with the specified asynchronous computation.
-     * <p>
-     * This method based on that fact that all tasks instantiated by this scheduler implement
-     * {@link AbstractTaskScheduler.ThreadAffinityAsyncResult} interface.
-     * </p>
-     *
-     * @param ar The asynchronous computation to interrupt.
-     * @return {@literal true}, if the specified asynchronous computation is interrupted; otherwise, {@literal false}.
-     */
-    @Override
-    public final boolean interrupt(final AsyncResult<?> ar) {
-        return ar instanceof ThreadAffinityAsyncResult<?> &&
-                interrupt((ThreadAffinityAsyncResult<?>) ar);
     }
 }

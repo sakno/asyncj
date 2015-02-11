@@ -2,9 +2,6 @@ package asyncj.impl;
 
 import asyncj.TaskScheduler;
 
-import java.lang.ref.Reference;
-import java.lang.ref.WeakReference;
-import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
@@ -18,56 +15,6 @@ import java.util.concurrent.TimeUnit;
  * @since 1.0
  */
 public final class TaskExecutor extends AbstractTaskScheduler {
-    private static abstract class ThreadAffinityTask<V> extends Task<V> implements ThreadAffinityAsyncResult<V>{
-        private Reference<Thread> affinity = null;
-
-        private ThreadAffinityTask(final TaskScheduler scheduler){
-            super(scheduler);
-        }
-
-        private static <V> ThreadAffinityTask<V> create(final TaskScheduler scheduler, final Callable<V> task){
-            return new ThreadAffinityTask<V>(scheduler) {
-                @Override
-                public V call() throws Exception {
-                    return task.call();
-                }
-            };
-        }
-
-        /**
-         * Creates a new instance of the child task.
-         *
-         * @param scheduler The scheduler that owns by the newly created task. Cannot be {@literal null}.
-         * @param task      The implementation of the child task. Cannot be {@literal null}.
-         * @return A new instance of the child task.
-         */
-        @Override
-        protected final  <O> Task<O> newChildTask(final TaskScheduler scheduler, final Callable<O> task) {
-            return create(scheduler, task);
-        }
-
-        /**
-         * Gets thread associated with the asynchronous computation.
-         * <p>
-         * This method is not deterministic and may return {@literal null} if
-         * thread that owns by this task is already completed, stopped or destroyed.
-         *
-         * @return The thread associated with the asynchronous computation.
-         */
-        @Override
-        public final Thread getThread() {
-            return affinity != null ? affinity.get() : null;
-        }
-
-        private void setThread(final Thread affinity){
-            this.affinity = new WeakReference<>(affinity);
-        }
-
-        private void clearThread(){
-            if(affinity != null) affinity.clear();
-            affinity = null;
-        }
-    }
 
     /**
      * Creates a new task executor with the given initial
@@ -149,8 +96,13 @@ public final class TaskExecutor extends AbstractTaskScheduler {
      * cancellation of the underlying task
      */
     @Override
-    protected <T> ThreadAffinityTask<T> newTaskFor(final Callable<T> callable) {
-        return ThreadAffinityTask.create(this, Objects.requireNonNull(callable, "callable is null."));
+    protected <T> Task<T> newTaskFor(final Callable<T> callable) {
+        return new Task<T>(this) {
+            @Override
+            public T call() throws Exception {
+                return callable.call();
+            }
+        };
     }
 
     /**
@@ -169,8 +121,8 @@ public final class TaskExecutor extends AbstractTaskScheduler {
      */
     @Override
     protected void beforeExecute(final Thread t, final Runnable r) {
-        if(r instanceof ThreadAffinityTask<?>)
-            ((ThreadAffinityTask<?>)r).setThread(t);
+        if(r instanceof Task<?>)
+            ((Task<?>)r).setExecutionThread(t);
     }
 
     /**
@@ -184,7 +136,7 @@ public final class TaskExecutor extends AbstractTaskScheduler {
      */
     @Override
     protected void afterExecute(final Runnable r, final Throwable t) {
-        if (r instanceof ThreadAffinityTask<?>)
-            ((ThreadAffinityTask<?>) r).clearThread();
+        if(r instanceof Task<?>)
+            ((Task<?>)r).clearThread();
     }
 }

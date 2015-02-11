@@ -25,7 +25,7 @@ public interface AsyncResult<V> extends Future<V> {
      * @param action       The action implementing attached asynchronous computation if this computation
      *                     is completed successfully. Cannot be {@literal null}.
      * @param errorHandler The action implementing attached asynchronous computation if this computation
-     *                     is failed. May be {@literal null}.
+     *                     is failed. Cannot be {@literal null}.
      * @param <O>          Type of the attached asynchronous computation result.
      * @return The object that represents state of the attached asynchronous computation.
      */
@@ -39,7 +39,7 @@ public interface AsyncResult<V> extends Future<V> {
      * @param action       The action implementing attached asynchronous computation if this computation
      *                     is completed successfully. Cannot be {@literal null}.
      * @param errorHandler The action implementing attached asynchronous computation if this computation
-     *                     is failed. May be {@literal null}.
+     *                     is failed. Cannot be {@literal null}.
      * @param <O>          Type of the attached asynchronous computation result.
      * @return The object that represents state of the attached asynchronous computation.
      */

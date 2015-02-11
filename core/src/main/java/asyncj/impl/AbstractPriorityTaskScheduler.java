@@ -31,11 +31,9 @@ public abstract class AbstractPriorityTaskScheduler extends AbstractTaskSchedule
         }
 
         private static int getPriority(final Object task, final int defaultPriority) {
-            if (task instanceof IntSupplier)
-                return ((IntSupplier) task).getAsInt();
-            else if (task instanceof ProxyTask<?, ?>)
-                return getPriority((((ProxyTask<?, ?>) task)).parent, defaultPriority);
-            else return defaultPriority;
+            return task instanceof IntSupplier ?
+                    ((IntSupplier) task).getAsInt() :
+                    defaultPriority;
         }
 
         @Override
@@ -70,12 +68,12 @@ public abstract class AbstractPriorityTaskScheduler extends AbstractTaskSchedule
      */
     @Override
     public final <O, T extends IntSupplier & Callable<O>> AsyncResult<O> submit(final T task) {
-        final PriorityTask<O> t = newTaskFor(task, task.getAsInt());
+        final Task<O> t = newTaskFor(task, task.getAsInt());
         execute(t);
         return t;
     }
 
-    protected abstract <T> PriorityTask<T> newTaskFor(final Callable<T> callable, final int priority);
+    protected abstract <T> Task<T> newTaskFor(final Callable<T> callable, final int priority);
 
     /**
      * Returns a {@link Task} for the given callable task.
@@ -87,7 +85,7 @@ public abstract class AbstractPriorityTaskScheduler extends AbstractTaskSchedule
      * cancellation of the underlying task
      */
     @Override
-    protected final <T> PriorityTask<T> newTaskFor(final Callable<T> callable) {
+    protected final <T> Task<T> newTaskFor(final Callable<T> callable) {
         return newTaskFor(callable, callable instanceof IntSupplier ? ((IntSupplier) callable).getAsInt() : AUTO_PRIORITY);
     }
 }

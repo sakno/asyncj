@@ -10,7 +10,9 @@ import org.glassfish.jersey.servlet.ServletContainer;
 final class TestServlet extends ServletContainer {
 
     private static ResourceConfig createResourceConfig(){
-        return new ResourceConfig(SimpleServiceImpl.class);
+        final ResourceConfig result = new ResourceConfig();
+        result.register(new SimpleServiceImpl());
+        return result;
     }
 
     /**
