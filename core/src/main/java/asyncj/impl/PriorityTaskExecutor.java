@@ -155,6 +155,6 @@ public final class PriorityTaskExecutor extends AbstractPriorityTaskScheduler {
     @Override
     protected void afterExecute(final Runnable r, final Throwable t) {
         if (r instanceof Task<?>)
-            ((Task<?>) r).clearThread();
+            ((Task<?>) r).setExecutionThread(null);
     }
 }

@@ -35,7 +35,6 @@ public abstract class Task<V> extends AbstractTask<V> implements InternalAsyncRe
 
     protected Task(final TaskScheduler scheduler, final int priority){
         super(scheduler);
-        setState(CREATED_STATE);
         creationThread = Thread.currentThread();
         executionThread = null;
         this.priority = priority;
@@ -43,10 +42,6 @@ public abstract class Task<V> extends AbstractTask<V> implements InternalAsyncRe
 
     final void setExecutionThread(final Thread value){
         this.executionThread = value;
-    }
-
-    final void clearThread(){
-        this.executionThread = null;
     }
 
     /**

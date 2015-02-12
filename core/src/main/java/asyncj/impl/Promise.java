@@ -20,7 +20,6 @@ class Promise<V> extends AbstractTask<V> implements InternalAsyncResult<V>, Asyn
 
     private Promise(final TaskScheduler scheduler, final int priority){
         super(scheduler);
-        setState(CREATED_STATE);
         this.priority = priority;
     }
 

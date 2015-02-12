@@ -5,6 +5,7 @@ import asyncj.AsyncResult;
 import asyncj.AsyncResultState;
 import asyncj.TaskScheduler;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -40,6 +41,7 @@ abstract class AbstractTask<V> extends AbstractQueuedSynchronizer implements Int
 
 
     AbstractTask(final TaskScheduler scheduler){
+        setState(CREATED_STATE);
         this.scheduler = scheduler;
         preventTransition = false;
         callbacks = new AsyncCallbackList<>();
@@ -277,6 +279,11 @@ abstract class AbstractTask<V> extends AbstractQueuedSynchronizer implements Int
     @Override
     protected final boolean tryReleaseShared(final int ignore) {
         return true;
+    }
+
+    @Override
+    public final V get(final Duration timeout) throws InterruptedException, ExecutionException, TimeoutException {
+        return timeout == null ? get() : get(timeout.toMillis(), TimeUnit.MILLISECONDS);
     }
 
     private String toString(final Map<String, Object> fields){
