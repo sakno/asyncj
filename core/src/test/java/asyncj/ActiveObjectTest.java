@@ -1,6 +1,7 @@
 package asyncj;
 
 import asyncj.impl.Task;
+import asyncj.impl.TaskExecutor;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -121,7 +122,8 @@ public final class ActiveObjectTest extends Assert {
     @Test
     public void pipeliningTest() throws InterruptedException, ExecutionException, TimeoutException {
         Task.enableAdvancedStringRepresentation();
-        final ArrayOperations obj = new ArrayOperations();
+        final TaskScheduler scheduler = TaskExecutor.newDefaultThreadExecutor();
+        final ArrayOperations obj = new ArrayOperations(scheduler);
         AsyncResult<Integer[]> ar = obj.reverseArray(new Integer[]{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13});
         for (int i = 0; i < 100; i++) {
             ar = ar.then((Integer[] array) -> {
@@ -131,6 +133,7 @@ public final class ActiveObjectTest extends Assert {
             });
         }
         final Integer[] result = ar.get(10, TimeUnit.SECONDS);
+        assertTrue(scheduler.shutdownNow().isEmpty());
         assertNotNull(result);
         assertEquals(13, result.length);
     }

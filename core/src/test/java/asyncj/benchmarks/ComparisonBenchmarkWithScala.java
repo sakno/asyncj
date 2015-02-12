@@ -6,9 +6,11 @@ import akka.dispatch.Mapper;
 import asyncj.AsyncResult;
 import asyncj.AsyncUtils;
 import asyncj.TaskScheduler;
+import asyncj.ThrowableFunction;
 import asyncj.impl.TaskExecutor;
 import com.carrotsearch.junitbenchmarks.AbstractBenchmark;
 import com.carrotsearch.junitbenchmarks.BenchmarkOptions;
+import com.carrotsearch.junitbenchmarks.annotation.AxisRange;
 import com.carrotsearch.junitbenchmarks.annotation.BenchmarkMethodChart;
 import org.junit.Test;
 import scala.concurrent.Await;
@@ -27,7 +29,7 @@ import java.util.concurrent.TimeUnit;
 @BenchmarkMethodChart(filePrefix = "asyncj-vs-scala")
 public final class ComparisonBenchmarkWithScala extends AbstractBenchmark {
     private final Integer[] source = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
-    private final Mapper<Integer[], Integer[]> mapper = new Mapper<Integer[], Integer[]>() {
+    private static final Mapper<Integer[], Integer[]> mapper = new Mapper<Integer[], Integer[]>() {
         @Override
         public Integer[] apply(final Integer[] array) {
             for (int j = 0; j < array.length; j++)
@@ -35,8 +37,13 @@ public final class ComparisonBenchmarkWithScala extends AbstractBenchmark {
             return array;
         }
     };
+    private static final ThrowableFunction<Integer[], Integer[]> asyncjMapper = (Integer[] array) -> {
+        for (int j = 0; j < array.length; j++)
+            array[j] += j;
+        return array;
+    };
 
-    private static final int PIPELINE_LENGTH = 100;
+    private static final int PIPELINE_LENGTH = 10000;
 
     private void scalaPipeliningBenchmark(final ExecutionContextExecutor executor,
                                           final int pipelineLength) throws Exception {
@@ -52,25 +59,25 @@ public final class ComparisonBenchmarkWithScala extends AbstractBenchmark {
         //execute pipelining via AsyncJ
         AsyncResult<Integer[]> ar = AsyncUtils.successful(scheduler, source);
         for (int i = 0; i < pipelineLength; i++)
-            ar = ar.then((Integer[] array) -> {
-                for (int j = 0; j < array.length; j++)
-                    array[j] += j;
-                return array;
-            });
+            ar = ar.then(asyncjMapper);
         ar.get(4, TimeUnit.SECONDS);
     }
 
     @Test
-    @BenchmarkOptions(benchmarkRounds = 10, warmupRounds = 5)
+    @BenchmarkOptions(benchmarkRounds = 50, warmupRounds = 5)
     public void scalaPipelineBenchmark() throws Exception {
-        final ExecutionContextExecutor executor = ExecutionContexts.fromExecutor(TaskExecutor.newDefaultThreadExecutor());
+        final TaskExecutor scheduler = TaskExecutor.newDefaultThreadExecutor();
+        final ExecutionContextExecutor executor = ExecutionContexts.fromExecutor(scheduler);
         scalaPipeliningBenchmark(executor, PIPELINE_LENGTH);
+        scheduler.shutdown();
     }
 
     @Test
-    @BenchmarkOptions(benchmarkRounds = 10, warmupRounds = 5)
+    @BenchmarkOptions(benchmarkRounds = 50, warmupRounds = 5)
+    @AxisRange
     public void asyncjPipelineBenchmark() throws Exception {
         final TaskScheduler scheduler = TaskExecutor.newDefaultThreadExecutor();
         asyncjPipelineBenchmark(scheduler, PIPELINE_LENGTH);
+        scheduler.shutdown();
     }
 }

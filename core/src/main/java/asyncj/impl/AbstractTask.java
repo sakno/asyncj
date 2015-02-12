@@ -254,24 +254,19 @@ abstract class AbstractTask<V> extends AbstractQueuedSynchronizer implements Int
      */
     final void done(final int finalState) {
         //unwind callbacks
-        scheduler.submit(new Runnable() {
-            private final Exception error = AbstractTask.this.error;
-            private final V result = AbstractTask.this.result;
-            private final Iterable<AsyncCallback<? super V>> callbacks = AbstractTask.this.callbacks.dumpCallbacks();
-
-            @Override
-            public void run() {
-                for (final AsyncCallback<? super V> callback : callbacks)
-                    switch (finalState) {
-                        case CANCELLED_STATE:
-                            callback.invoke(null,
-                                    this.error instanceof InterruptedException || this.error instanceof CancellationException ?
-                                            this.error : new CancellationException());
-                        default:
-                            callback.invoke(this.result, this.error);
-                    }
-            }
-        });
+        final Exception error = this.error;
+        final V result = this.result;
+        for (final AsyncCallback<? super V> callback : callbacks.dumpCallbacks())
+            scheduler.submit(()-> {
+                switch (finalState) {
+                    case CANCELLED_STATE:
+                        callback.invoke(null,
+                                error instanceof InterruptedException || error instanceof CancellationException ?
+                                        error : new CancellationException());
+                    default:
+                        callback.invoke(result, error);
+                }
+            });
     }
 
     @Override

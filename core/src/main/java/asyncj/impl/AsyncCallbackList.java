@@ -30,11 +30,6 @@ final class AsyncCallbackList<O> extends AtomicReference<AsyncCallbackChain<O>> 
         return getAndSet(getEmptyChain());
     }
 
-    void attachTo(final AsyncResult<O> ar){
-        for(final AsyncCallback<? super O> callback: dumpCallbacks())
-            ar.onCompleted(callback);
-    }
-
     boolean isEmpty() {
         return EMPTY_CHAIN == get();
     }

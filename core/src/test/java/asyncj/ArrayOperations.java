@@ -15,7 +15,7 @@ final class ArrayOperations extends ActiveObject {
         this(TaskExecutor.newSingleThreadExecutor());
     }
 
-    public ArrayOperations(final TaskExecutor executor){
+    public ArrayOperations(final TaskScheduler executor){
         super(executor);
     }
 
