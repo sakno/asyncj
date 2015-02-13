@@ -137,9 +137,9 @@ public abstract class Task<V> extends AbstractTask<V> implements InternalAsyncRe
      * @return
      */
     @Override
-    public final  <O> AsyncResult<O> then(final ThrowableFunction<? super V, ? extends O> action,
+    public final  <O> Promise<V, O> then(final ThrowableFunction<? super V, ? extends O> action,
                                                         final ThrowableFunction<Exception, ? extends O> errorHandler) {
-        return Promise.then(this, action, errorHandler);
+        return Promise.create(this, action, errorHandler);
     }
 
     /**
@@ -149,8 +149,8 @@ public abstract class Task<V> extends AbstractTask<V> implements InternalAsyncRe
      * @return
      */
     @Override
-    public final  <O> AsyncResult<O> then(final ThrowableFunction<? super V, ? extends O> action) {
-        return Promise.then(this, action);
+    public final  <O> Promise<V, O> then(final ThrowableFunction<? super V, ? extends O> action) {
+        return Promise.create(this, action);
     }
 
     /**
@@ -161,9 +161,9 @@ public abstract class Task<V> extends AbstractTask<V> implements InternalAsyncRe
      * @return
      */
     @Override
-    public final  <O> AsyncResult<O> then(final Function<? super V, AsyncResult<O>> action,
+    public final  <O> Promise<V, O> then(final Function<? super V, AsyncResult<O>> action,
                                    final Function<Exception, AsyncResult<O>> errorHandler) {
-        return Promise.then(this, action, errorHandler);
+        return Promise.create(this, action, errorHandler);
     }
 
     /**
@@ -173,7 +173,7 @@ public abstract class Task<V> extends AbstractTask<V> implements InternalAsyncRe
      * @return
      */
     @Override
-    public final <O> AsyncResult<O> then(final Function<? super V, AsyncResult<O>> action) {
-        return Promise.then(this, action);
+    public final <O> Promise<V, O> then(final Function<? super V, AsyncResult<O>> action) {
+        return Promise.create(this, action);
     }
 }

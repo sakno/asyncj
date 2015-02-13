@@ -15,25 +15,29 @@ import java.util.function.IntSupplier;
  * @version 1.0
  * @since 1.0
  */
-class Promise<V> extends AbstractTask<V> implements InternalAsyncResult<V>, AsyncCallback<V>, IntSupplier {
+abstract class Promise<I, V> extends AbstractTask<V> implements InternalAsyncResult<V>, AsyncCallback<V> {
     private final int priority;
+    private final AsyncResult<?> linkedTask;
 
-    private Promise(final TaskScheduler scheduler, final int priority){
-        super(scheduler);
-        this.priority = priority;
+    private Promise(final AbstractTask<I> parent){
+        super(parent.scheduler);
+        this.priority = parent.getAsInt();
+        linkedTask = parent.onCompletedImpl(this::onParentCompleted);
     }
 
     /**
-     * Gets priority of this task.
-     *
-     * @return The priority of this task.
+     * Informs this task about completion of the parent task.
+     * @param result The result comes from parent task.
+     * @param error The error comes from the parent task.
      */
+    protected abstract void onParentCompleted(final I result, final Exception error);
+
     @Override
     public final int getAsInt() {
         return priority;
     }
 
-    final <I> void complete(final I input, final ThrowableFunction<? super I, ? extends V> action) {
+    final <S> void complete(final S input, final ThrowableFunction<? super S, ? extends V> action) {
         if(compareAndSetState(CREATED_STATE, EXECUTED_STATE)){
             int finalState = EXECUTED_STATE;
             try {
@@ -48,7 +52,7 @@ class Promise<V> extends AbstractTask<V> implements InternalAsyncResult<V>, Asyn
         }
     }
 
-    final <I> void complete(final I input,
+    final void complete(final I input,
                           final ThrowableFunction<? super I, ? extends V> action,
                           final ThrowableFunction<Exception, ? extends V> errorHandler) {
         if (compareAndSetState(CREATED_STATE, EXECUTED_STATE)) {
@@ -81,13 +85,13 @@ class Promise<V> extends AbstractTask<V> implements InternalAsyncResult<V>, Asyn
         done(complete(input, error));
     }
 
-    final <I> void complete(final I input,
-                            final Function<? super I, AsyncResult<V>> action) {
+    final <S> void complete(final S input,
+                            final Function<? super S, AsyncResult<V>> action) {
         if (compareAndSetState(CREATED_STATE, EXECUTED_STATE))
             action.apply(input).onCompleted(this);
     }
 
-    final <I> void complete(final I inp,
+    final void complete(final I inp,
                             final Function<? super I, AsyncResult<V>> action,
                             final Function<Exception, AsyncResult<V>> errorHandler) {
         if (compareAndSetState(CREATED_STATE, EXECUTED_STATE))
@@ -131,7 +135,7 @@ class Promise<V> extends AbstractTask<V> implements InternalAsyncResult<V>, Asyn
                 case CANCELLED_STATE:
                     return true;
                 case EXECUTED_STATE:
-                    if(!cancelCore(mayInterruptIfRunning)) return false;
+                    if(!linkedTask.cancel(mayInterruptIfRunning)) return false;
             }
         }
         while (cannotChangeState() || !compareAndSetState(currentState, CANCELLED_STATE));
@@ -140,24 +144,16 @@ class Promise<V> extends AbstractTask<V> implements InternalAsyncResult<V>, Asyn
         return true;
     }
 
-    protected boolean cancelCore(final boolean mayInterruptIfRunning){
-        return true;
-    }
-
-    static <I, O> AsyncResult<O> then(final AbstractTask<I> owner,
+    static <I, O> Promise<I, O> create(final AbstractTask<I> owner,
                                     final Function<? super I, AsyncResult<O>> action) {
         Objects.requireNonNull(action, "action is null.");
         //synchronization via AQS is not required
-        return new Promise<O>(owner.scheduler, owner.getAsInt()) {
-            private final AsyncResult<?> parentTask = owner.onCompletedImpl((result, error) -> {
+        return new Promise<I, O>(owner) {
+            @Override
+            protected void onParentCompleted(final I result, final Exception error) {
                 if (error == null)
                     complete(result, action);
                 else invoke(null, error);
-            });
-
-            @Override
-            protected boolean cancelCore(final boolean mayInterruptIfRunning) {
-                return parentTask.cancel(mayInterruptIfRunning);
             }
         };
     }
@@ -175,23 +171,19 @@ class Promise<V> extends AbstractTask<V> implements InternalAsyncResult<V>, Asyn
      * @return The object that represents state of the attached asynchronous computation.
      */
     @Override
-    public final  <O> AsyncResult<O> then(final Function<? super V, AsyncResult<O>> action) {
-        return then(this, action);
+    public final <O> Promise<V, O> then(final Function<? super V, AsyncResult<O>> action) {
+        return create(this, action);
     }
 
-    static  <I, O> AsyncResult<O> then(final AbstractTask<I> owner,
+    static  <I, O> Promise<I, O> create(final AbstractTask<I> owner,
                                        final ThrowableFunction<? super I, ? extends O> action) {
         Objects.requireNonNull(action, "action is null.");
-        return new Promise<O>(owner.scheduler, owner.getAsInt()) {
-            private final AsyncResult<?> parentTask = owner.onCompletedImpl((result, error) -> {
+        return new Promise<I, O>(owner) {
+            @Override
+            protected void onParentCompleted(final I result, final Exception error) {
                 if (error == null)
                     complete(result, action);
                 else invoke(null, error);
-            });
-
-            @Override
-            protected boolean cancelCore(final boolean mayInterruptIfRunning) {
-                return parentTask.cancel(mayInterruptIfRunning);
             }
         };
     }
@@ -203,26 +195,22 @@ class Promise<V> extends AbstractTask<V> implements InternalAsyncResult<V>, Asyn
      * @return THe object that represents state of the chained computation.
      */
     @Override
-    public final  <O> AsyncResult<O> then(final ThrowableFunction<? super V, ? extends O> action) {
-        return then(this, action);
+    public final  <O> Promise<V, O> then(final ThrowableFunction<? super V, ? extends O> action) {
+        return create(this, action);
     }
 
-    static <I, O> AsyncResult<O> then(final AbstractTask<I> owner,
+    static <I, O> Promise<I, O> create(final AbstractTask<I> owner,
                                     final Function<? super I, AsyncResult<O>> action,
                                    final Function<Exception, AsyncResult<O>> errorHandler) {
         Objects.requireNonNull(action, "action is null.");
         Objects.requireNonNull(errorHandler, "errorHandler is null.");
         //synchronization via AQS is not required
-        return new Promise<O>(owner.scheduler, owner.getAsInt()) {
-            private final AsyncResult<?> parentTask = owner.onCompletedImpl((result, error) -> {
+        return new Promise<I, O>(owner) {
+            @Override
+            protected void onParentCompleted(final I result, final Exception error) {
                 if (error == null)
                     complete(result, action, errorHandler);
                 else complete(error, errorHandler);
-            });
-
-            @Override
-            protected boolean cancelCore(final boolean mayInterruptIfRunning) {
-                return parentTask.cancel(mayInterruptIfRunning);
             }
         };
     }
@@ -240,26 +228,22 @@ class Promise<V> extends AbstractTask<V> implements InternalAsyncResult<V>, Asyn
      * @return The object that represents state of the attached asynchronous computation.
      */
     @Override
-    public final  <O> AsyncResult<O> then(final Function<? super V, AsyncResult<O>> action,
+    public final  <O> Promise<V, O> then(final Function<? super V, AsyncResult<O>> action,
                                    final Function<Exception, AsyncResult<O>> errorHandler) {
-        return then(this, action, errorHandler);
+        return create(this, action, errorHandler);
     }
 
-    static  <I, O> AsyncResult<O> then(final AbstractTask<I> owner,
+    static  <I, O> Promise<I, O> create(final AbstractTask<I> owner,
                                     final ThrowableFunction<? super I, ? extends O> action,
                                     final ThrowableFunction<Exception, ? extends O> errorHandler) {
         Objects.requireNonNull(action, "action is null.");
         Objects.requireNonNull(errorHandler, "errorHandler is null.");
-        return new Promise<O>(owner.scheduler, owner.getAsInt()) {
-            private final AsyncResult<?> parentTask = owner.onCompletedImpl((result, error) -> {
+        return new Promise<I, O>(owner) {
+            @Override
+            protected void onParentCompleted(final I result, final Exception error) {
                 if (error == null)
                     complete(result, action, errorHandler);
                 else complete(error, errorHandler);
-            });
-
-            @Override
-            protected boolean cancelCore(final boolean mayInterruptIfRunning) {
-                return parentTask.cancel(mayInterruptIfRunning);
             }
         };
     }
@@ -274,8 +258,8 @@ class Promise<V> extends AbstractTask<V> implements InternalAsyncResult<V>, Asyn
      * @return The object that represents state of the attached asynchronous computation.
      */
     @Override
-    public final  <O> AsyncResult<O> then(final ThrowableFunction<? super V, ? extends O> action,
+    public final  <O> Promise<V, O> then(final ThrowableFunction<? super V, ? extends O> action,
                                    final ThrowableFunction<Exception, ? extends O> errorHandler) {
-        return then(this, action, errorHandler);
+        return create(this, action, errorHandler);
     }
 }

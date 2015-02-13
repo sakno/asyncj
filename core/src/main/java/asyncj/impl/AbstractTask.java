@@ -126,22 +126,20 @@ abstract class AbstractTask<V> extends AbstractQueuedSynchronizer implements Int
         return preventTransition;
     }
 
+    private static <V> Runnable wrapCallback(final V result,
+                                               final Exception error,
+                                               final AsyncCallback<? super V> callback){
+        return ()->callback.invoke(result, error);
+    }
+
     final AsyncResult<?> onCompletedImpl(final AsyncCallback<? super V> callback){
         preventTransition = true;
         try {
             switch (getState()) {
                 case CANCELLED_STATE:
-                    return scheduler.submit(()->callback.invoke(null, new CancellationException()));
+                    return scheduler.submit(wrapCallback(null, new CancellationException(), callback));
                 case COMPLETED_STATE:
-                    return scheduler.submit(new Runnable() {
-                        private final Exception error = AbstractTask.this.error;
-                        private final V result = AbstractTask.this.result;
-
-                        @Override
-                        public void run() {
-                            callback.invoke(result, error);
-                        }
-                    });
+                    return scheduler.submit(wrapCallback(result, error, callback));
                 case EXECUTED_STATE:
                 case CREATED_STATE:
                     callbacks.add(callback);
