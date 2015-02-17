@@ -74,7 +74,6 @@ public final class ComparisonBenchmarkWithScala extends AbstractBenchmark {
 
     @Test
     @BenchmarkOptions(benchmarkRounds = 50, warmupRounds = 5)
-    @AxisRange
     public void asyncjPipelineBenchmark() throws Exception {
         final TaskScheduler scheduler = TaskExecutor.newDefaultThreadExecutor();
         asyncjPipelineBenchmark(scheduler, PIPELINE_LENGTH);
